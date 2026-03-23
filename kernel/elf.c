@@ -7,6 +7,8 @@
 #include "common/string.h"
 #include "common/limine.h"
 
+extern volatile struct limine_hhdm_request hhdm_request;
+
 int elf_load(const char *path) {
     vfs_node_t *node = vfs_open(path);
     if (!node) return -1;
@@ -23,6 +25,7 @@ int elf_load(const char *path) {
 
     task_t *new_task = sched_create_task(NULL, true);
     uint64_t *pagemap = new_task->pml4;
+    uint64_t hhdm = hhdm_request.response->offset;
 
     Elf64_Phdr *phdrs = (Elf64_Phdr *)(buffer + ehdr->e_phoff);
     for (int i = 0; i < ehdr->e_phnum; i++) {
@@ -32,14 +35,15 @@ int elf_load(const char *path) {
                 void *phys = pmm_alloc_page();
                 vmm_map(pagemap, phdrs[i].p_vaddr + (j * PAGE_SIZE), (uintptr_t)phys, PTE_PRESENT | PTE_WRITABLE | PTE_USER);
 
-                extern volatile struct limine_hhdm_request hhdm_request;
-                uint64_t hhdm = hhdm_request.response->offset;
-
+                /* Acceso vía HHDM para la copia */
                 size_t to_copy = (phdrs[i].p_filesz > j * PAGE_SIZE) ? phdrs[i].p_filesz - j * PAGE_SIZE : 0;
                 if (to_copy > PAGE_SIZE) to_copy = PAGE_SIZE;
 
                 if (to_copy > 0) {
                     memcpy((void *)((uintptr_t)phys + hhdm), buffer + phdrs[i].p_offset + (j * PAGE_SIZE), to_copy);
+                } else {
+                    /* BSS / Relleno de ceros */
+                    memset((void *)((uintptr_t)phys + hhdm), 0, PAGE_SIZE);
                 }
             }
         }

@@ -18,7 +18,6 @@
 #include "elf.h"
 #include "keyboard_buf.h"
 
-/* Marcadores del protocolo Limine */
 __attribute__((used, section(".requests"))) volatile LIMINE_BASE_REVISION(2);
 __attribute__((used, section(".requests"))) volatile struct limine_framebuffer_request framebuffer_request = { .id = LIMINE_FRAMEBUFFER_REQUEST, .revision = 0 };
 __attribute__((used, section(".requests"))) volatile struct limine_memmap_request memmap_request = { .id = LIMINE_MEMMAP_REQUEST, .revision = 0 };
@@ -41,10 +40,8 @@ void kmain(void) {
     syscall_init();
     vfs_init();
 
-    if (module_request.response && module_request.response->module_count > 0) {
-        struct limine_file *module = module_request.response->modules[0];
-        vfs_root = initrd_init(module->address, module->size);
-    }
+    /* Cargar todos los archivos del Initrd como archivos individuales */
+    initrd_load_all(module_request.response);
 
     pit_init(100);
     if (framebuffer_request.response == NULL || framebuffer_request.response->framebuffer_count < 1) hlt();
@@ -53,8 +50,8 @@ void kmain(void) {
     video_init(fb);
     video_clear(0x1E1E1E);
 
-    /* LANZAR EL SHELL DEL CARLEY KERNEL */
-    elf_load("/shell.elf");
+    /* CARGAR EL SHELL */
+    elf_load("shell.elf");
 
     __asm__ volatile("sti");
     for (;;) hlt();

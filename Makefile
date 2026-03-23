@@ -35,7 +35,8 @@ iso: $(KERNEL) userland
 	cp $(KERNEL) iso_root/boot/
 	cp limine.conf iso_root/boot/
 	cp user/shell.elf iso_root/shell.elf
-	@echo "ISO lista para empaquetar. El Shell se cargara como modulo."
+	cp user/hello.elf iso_root/hello.elf
+	@echo "ISO lista con Shell y Hello."
 
 clean:
 	rm -rf $(OBJ) $(KERNEL) carley-kernel.iso iso_root

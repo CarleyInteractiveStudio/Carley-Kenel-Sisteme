@@ -13,6 +13,8 @@
 #define SYS_WRITE     6
 #define SYS_READDIR   7
 #define SYS_EXIT      8
+#define SYS_SBRK      9
+#define SYS_SPAWN     10
 
 void syscall_init(void);
 context_t *syscall_handler(context_t *ctx);

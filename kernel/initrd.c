@@ -1,6 +1,7 @@
 #include "initrd.h"
 #include "kheap.h"
 #include "common/string.h"
+#include "common/limine.h"
 
 #define MAX_INITRD_FILES 16
 
@@ -35,32 +36,39 @@ static vfs_node_t *initrd_finddir_ops(vfs_node_t *node, const char *name) {
     return NULL;
 }
 
-vfs_node_t *initrd_init(void *addr, uint64_t size) {
-    /* Por ahora, tratamos el modulo unico como un archivo llamado 'shell.elf' */
-    /* En un sistema real, parseariamos una estructura tar o cpio */
+void initrd_load_all(struct limine_module_response *response) {
+    if (!response) return;
 
-    vfs_node_t *file_node = kmalloc(sizeof(vfs_node_t));
-    strcpy(file_node->name, "shell.elf");
-    file_node->type = VFS_FILE;
-    file_node->size = size;
-    file_node->priv_data = addr;
-    static vfs_ops_t file_ops = {.read = initrd_read_ops, .finddir = NULL, .readdir = NULL};
-    file_node->ops = &file_ops;
+    for (uint64_t i = 0; i < response->module_count; i++) {
+        struct limine_file *module = response->modules[i];
 
-    initrd_files[0] = file_node;
-    initrd_file_count = 1;
+        vfs_node_t *file_node = kmalloc(sizeof(vfs_node_t));
+
+        const char *filename = module->path;
+        const char *slash = filename;
+        while (*filename) {
+            if (*filename == '/') slash = filename + 1;
+            filename++;
+        }
+
+        strcpy(file_node->name, slash);
+        file_node->type = VFS_FILE;
+        file_node->size = module->size;
+        file_node->priv_data = module->address;
+
+        static vfs_ops_t file_ops = {.read = initrd_read_ops, .finddir = NULL, .readdir = NULL};
+        file_node->ops = &file_ops;
+
+        if (initrd_file_count < MAX_INITRD_FILES) {
+            initrd_files[initrd_file_count++] = file_node;
+        }
+    }
 
     vfs_node_t *root = kmalloc(sizeof(vfs_node_t));
     strcpy(root->name, "/");
     root->type = VFS_DIRECTORY;
     root->size = 0;
-
-    static vfs_ops_t root_ops = {
-        .read = NULL,
-        .finddir = initrd_finddir_ops,
-        .readdir = initrd_readdir_ops
-    };
+    static vfs_ops_t root_ops = {.read = NULL, .finddir = initrd_finddir_ops, .readdir = initrd_readdir_ops};
     root->ops = &root_ops;
-
-    return root;
+    vfs_root = root;
 }

@@ -1,5 +1,5 @@
-#include "include/stdio.h"
-#include "include/string.h"
+#include <stdio.h>
+#include <string.h>
 #include <stdint.h>
 
 /* Syscall wrappers */
@@ -11,6 +11,7 @@ extern long syscall3(int num, long arg1, long arg2, long arg3);
 #define SYS_READ      4
 #define SYS_READDIR   7
 #define SYS_EXIT      8
+#define SYS_SPAWN     10
 
 typedef struct {
     char name[128];
@@ -31,7 +32,7 @@ void main(void) {
     char cmd[64];
     int pos = 0;
 
-    printf("\nCarley Shell v0.1\n");
+    printf("\nCarley Shell v0.2\n");
     printf("Escribe 'help' para ver los comandos.\n");
 
     for (;;) {
@@ -41,7 +42,6 @@ void main(void) {
 
         while (1) {
             char c;
-            /* fd=0 (stdin), buffer=&c, size=1 */
             if (syscall3(SYS_READ, 0, (long)&c, 1) > 0) {
                 if (c == '\n') {
                     putchar('\n');
@@ -61,7 +61,7 @@ void main(void) {
         }
 
         if (strcmp(cmd, "help") == 0) {
-            printf("Comandos: help, ls, clear, exit\n");
+            printf("Comandos: help, ls, clear, exit, [programa]\n");
         } else if (strcmp(cmd, "ls") == 0) {
             shell_ls();
         } else if (strcmp(cmd, "clear") == 0) {
@@ -69,7 +69,11 @@ void main(void) {
         } else if (strcmp(cmd, "exit") == 0) {
             syscall1(SYS_EXIT, 0);
         } else if (strlen(cmd) > 0) {
-            printf("Comando no reconocido: %s\n", cmd);
+            if (syscall1(SYS_SPAWN, (long)cmd) != 0) {
+                printf("Comando o programa no encontrado: %s\n", cmd);
+            } else {
+                printf("Iniciando %s...\n", cmd);
+            }
         }
     }
 }
