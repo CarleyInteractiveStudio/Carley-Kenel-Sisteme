@@ -8,9 +8,6 @@
 #include "vmm.h"
 #include "elf.h"
 
-static uint32_t term_x = 10;
-static uint32_t term_y = 150;
-
 context_t *syscall_handler(context_t *ctx) {
     uint64_t sys_no = ctx->rax;
     task_t *curr = sched_get_current_task();
@@ -43,21 +40,11 @@ context_t *syscall_handler(context_t *ctx) {
             if (ctx->rdi == 1) { // stdout
                 char *buf = (char *)ctx->rsi;
                 for (size_t i = 0; i < ctx->rdx; i++) {
-                    if (buf[i] == '\n') {
-                        term_x = 10;
-                        term_y += 10;
-                    } else if (buf[i] == '\b') {
-                        if (term_x > 10) term_x -= 8;
-                        video_draw_rect(term_x, term_y, 8, 8, 0x1E1E1E);
-                    } else {
-                        video_draw_char(buf[i], term_x, term_y, 0xFFFFFF);
-                        term_x += 8;
-                    }
-                    if (term_x > 600) { term_x = 10; term_y += 10; }
+                    /* Usar la nueva función con soporte de scroll */
+                    video_terminal_write(buf[i], 0xFFFFFF);
                 }
                 ctx->rax = ctx->rdx;
             } else {
-                /* Soporte para escritura en archivos reales del VFS */
                 ctx->rax = vfs_write((vfs_node_t *)ctx->rdi, 0, (uint32_t)ctx->rdx, (uint8_t *)ctx->rsi);
             }
             break;

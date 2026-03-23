@@ -11,7 +11,7 @@ LIBC := libc.a
 
 .PHONY: all clean
 
-all: $(LIBC) hello.elf shell.elf write.elf
+all: $(LIBC) hello.elf shell.elf write.elf edit.elf
 
 $(LIBC): $(LIBC_OBJ)
 	$(AR) rcs $@ $(LIBC_OBJ)
@@ -25,6 +25,9 @@ shell.elf: shell.o $(LIBC)
 write.elf: write.o $(LIBC)
 	$(CC) $(LDFLAGS) -T linker.ld write.o $(LIBC) -o $@
 
+edit.elf: edit.o $(LIBC)
+	$(CC) $(LDFLAGS) -T linker.ld edit.o $(LIBC) -o $@
+
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
@@ -32,4 +35,4 @@ write.elf: write.o $(LIBC)
 	$(AS) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -f $(LIBC_OBJ) $(LIBC) hello.o hello.elf shell.o shell.elf write.o write.elf
+	rm -f $(LIBC_OBJ) $(LIBC) hello.o hello.elf shell.o shell.elf write.o write.elf edit.o edit.elf
