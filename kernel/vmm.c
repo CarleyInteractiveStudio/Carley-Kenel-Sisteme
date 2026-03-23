@@ -31,6 +31,7 @@ static uint64_t *get_next_table(uint64_t *table, uint64_t index, bool allocate) 
     void *new_table = pmm_alloc_page();
     if (!new_table) return NULL;
     memset(phys_to_virt((uintptr_t)new_table), 0, PAGE_SIZE);
+    /* Solo permitimos acceso USER a las tablas de páginas internas si es necesario */
     table[index] = (uintptr_t)new_table | PTE_PRESENT | PTE_WRITABLE | PTE_USER;
     return phys_to_virt((uintptr_t)new_table);
 }
@@ -46,10 +47,10 @@ void vmm_init(void) {
         vmm_map(kernel_pml4, i + offset, i, PTE_PRESENT | PTE_WRITABLE);
     }
 
-    /* ACTUALIZACIÓN CRÍTICA: Mapear el kernel con PTE_USER para permitir ejecución en Ring 3 */
+    /* Mapear el kernel (SIN el flag PTE_USER para seguridad) */
     struct limine_kernel_address_response *ka = kernel_address_request.response;
     for (uintptr_t i = 0; i < 0x2000000; i += PAGE_SIZE) {
-        vmm_map(kernel_pml4, ka->virtual_base + i, ka->physical_base + i, PTE_PRESENT | PTE_WRITABLE | PTE_USER);
+        vmm_map(kernel_pml4, ka->virtual_base + i, ka->physical_base + i, PTE_PRESENT | PTE_WRITABLE);
     }
 
     vmm_switch_pagemap(kernel_pml4);

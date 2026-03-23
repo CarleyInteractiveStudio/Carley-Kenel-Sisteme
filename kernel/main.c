@@ -12,6 +12,7 @@
 #include "sched.h"
 #include "ipc.h"
 #include "syscall.h"
+#include "drivers/video.h"
 
 /* Marcadores del protocolo Limine */
 __attribute__((used, section(".requests"))) volatile LIMINE_BASE_REVISION(2);
@@ -20,71 +21,69 @@ __attribute__((used, section(".requests"))) volatile struct limine_memmap_reques
 __attribute__((used, section(".requests"))) volatile struct limine_hhdm_request hhdm_request = { .id = LIMINE_HHDM_REQUEST, .revision = 0 };
 __attribute__((used, section(".requests"))) volatile struct limine_kernel_address_request kernel_address_request = { .id = LIMINE_KERNEL_ADDRESS_REQUEST, .revision = 0 };
 
-static struct limine_framebuffer *fb;
+static void hlt(void) { for (;;) { __asm__("hlt"); } }
 
-/* Función auxiliar para detener la CPU */
-static void hlt(void) {
-    for (;;) {
-        __asm__("hlt");
-    }
-}
-
-/* Wrapper para syscalls */
-static inline void syscall_yield(void) { __asm__ volatile("int $0x80" : : "a"(SYS_YIELD)); }
-static inline int syscall_ipc_send(uint64_t dest, void *msg) { int ret; __asm__ volatile("int $0x80" : "=a"(ret) : "a"(SYS_IPC_SEND), "D"(dest), "S"(msg)); return ret; }
-static inline int syscall_ipc_recv(void *msg) { int ret; __asm__ volatile("int $0x80" : "=a"(ret) : "a"(SYS_IPC_RECV), "D"(msg)); return ret; }
-
-/* Tarea 1: Productor (Simula espacio de usuario) */
-void task1(void) {
-    uint32_t colors[] = {0xFF0000, 0x00FF00, 0x0000FF, 0xFFFF00};
-    int i = 0;
-    for (;;) {
-        ipc_msg_t msg;
-        msg.sender = 1;
-        msg.data[0] = colors[i];
-        syscall_ipc_send(2, &msg);
-        i = (i + 1) % 4;
-        uint64_t target_tick = pit_get_ticks() + 10;
-        while (pit_get_ticks() < target_tick) syscall_yield();
-    }
-}
-
-/* Tarea 2: Consumidor (Simula espacio de usuario) */
-void task2(void) {
+/* Tarea de UI: Maneja el teclado y la pantalla */
+void ui_task(void) {
     ipc_msg_t msg;
-    uint32_t color = 0x000000;
+    uint32_t x = 10, y = 150;
+
+    video_draw_string("Carley Kernel v0.1", 10, 10, 0xFFFFFF);
+    video_draw_string("Escribe algo:", 10, 130, 0xAAAAAA);
+
     for (;;) {
-        if (syscall_ipc_recv(&msg) == 0) {
-            color = (uint32_t)msg.data[0];
-        }
-        for (uint64_t i = 110; i < 210; i++) {
-            for (uint64_t j = 0; j < 100; j++) {
-                ((uint32_t *)fb->address)[i * (fb->pitch / 4) + j] = color;
+        if (ipc_recv(&msg) == 0) {
+            if (msg.sender == 100) { // Teclado
+                char c = (char)msg.data[0];
+                video_draw_char(c, x, y, 0x00FF00);
+                x += 8;
+                if (x > 300) { x = 10; y += 10; }
             }
         }
-        syscall_yield();
+        sched_yield();
     }
 }
 
-/* Punto de entrada del kernel */
+void draw_logo(void) {
+    video_draw_rect(50, 50, 40, 10, 0x3498DB);
+    video_draw_rect(50, 50, 10, 40, 0x3498DB);
+    video_draw_rect(50, 80, 40, 10, 0x3498DB);
+    video_draw_rect(100, 50, 10, 40, 0xE74C3C);
+    video_draw_rect(110, 65, 10, 10, 0xE74C3C);
+    video_draw_rect(120, 50, 10, 15, 0xE74C3C);
+    video_draw_rect(120, 75, 10, 15, 0xE74C3C);
+}
+
 void kmain(void) {
     if (LIMINE_BASE_REVISION_SUPPORTED == false) hlt();
 
+    /* 1. Inicializar Memoria y CPU básica */
     pmm_init();
     vmm_init();
     kheap_init();
-    sched_init();
-    syscall_init();
     gdt_init();
     idt_init();
+
+    /* 2. Inicializar Planificador y Syscalls */
+    sched_init();
+    syscall_init();
+
+    /* 3. Inicializar Hardware (Timers, Pantalla) */
     pit_init(100);
-
     if (framebuffer_request.response == NULL || framebuffer_request.response->framebuffer_count < 1) hlt();
-    fb = framebuffer_request.response->framebuffers[0];
+    struct limine_framebuffer *fb = framebuffer_request.response->framebuffers[0];
+    video_init(fb);
+    video_clear(0x1E1E1E);
+    draw_logo();
 
-    /* Crear tareas simulando espacio de usuario (Ring 3) */
-    sched_create_task(task1, true); // true = USER
-    sched_create_task(task2, true); // true = USER
+    /* 4. Crear tarea inicial */
+    sched_create_task(ui_task, false);
 
-    for (;;) hlt();
+    /* 5. Habilitar Interrupciones y saltar al primer hilo */
+    __asm__ volatile("sti");
+
+    /* Bucle de espera (el scheduler tomará el control al primer tick del PIT) */
+    for (;;) {
+        __asm__("hlt");
+    }
 }

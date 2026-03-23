@@ -14,7 +14,7 @@ CFLAGS := -Wall -Wextra -std=c11 -ffreestanding -fno-stack-protector -fno-stack-
 LDFLAGS := -nostdlib -static -m elf_x86_64 -z max-page-size=0x1000 -T linker.ld
 
 # Archivos fuente y objetos
-C_SOURCES := $(shell find kernel -name '*.c') $(shell find common -name '*.c')
+C_SOURCES := $(shell find kernel -name '*.c') $(shell find common -name '*.c') $(shell find drivers -name '*.c')
 S_SOURCES := $(shell find kernel -name '*.s')
 OBJ := $(C_SOURCES:.c=.o) $(S_SOURCES:.s=.o)
 
@@ -31,20 +31,18 @@ $(KERNEL): $(OBJ)
 %.o: %.s
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# Generación de la imagen ISO (Requiere xorriso y binarios de Limine en iso_root)
+# Generación de la imagen ISO (Requiere xorriso y binarios de Limine)
 iso: $(KERNEL)
 	mkdir -p iso_root/boot
 	cp $(KERNEL) iso_root/boot/
 	cp limine.conf iso_root/boot/
-	# Para generar una ISO arrancable, se deben copiar los binarios de limine
-	# (limine-bios.sys, limine-bios-cd.bin, etc.) al directorio iso_root
-	# y luego ejecutar xorriso.
-	@echo "Nota: Asegúrese de tener los binarios de Limine en el directorio raíz para generar la ISO."
-	# xorriso -as mkisofs -b boot/limine-bios-cd.bin \
-	# 	-no-emul-boot -boot-load-size 4 -boot-info-table \
-	# 	--efi-boot boot/limine-uefi-cd.bin \
-	# 	-efi-boot-part --efi-boot-image --protective-msdos-label \
-	# 	iso_root -o carley-kernel.iso
+	# Nota: Se asume que el usuario tiene xorriso instalado.
+	# Los binarios de limine deben estar en el path para un arranque real.
+	xorriso -as mkisofs -b boot/limine-bios-cd.bin \
+		-no-emul-boot -boot-load-size 4 -boot-info-table \
+		--efi-boot boot/limine-uefi-cd.bin \
+		-efi-boot-part --efi-boot-image --protective-msdos-label \
+		iso_root -o carley-kernel.iso || echo "Xorriso fallo: Asegurese de tener las herramientas de Limine."
 
 clean:
 	rm -rf $(OBJ) $(KERNEL) carley-kernel.iso iso_root

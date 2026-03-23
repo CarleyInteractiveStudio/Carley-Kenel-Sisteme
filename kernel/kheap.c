@@ -4,8 +4,8 @@
 #include "kheap.h"
 #include "pmm.h"
 #include "vmm.h"
+#include "spinlock.h"
 
-/* Estructura simple para un nodo del montón (heap) */
 typedef struct heap_node {
     size_t size;
     struct heap_node *next;
@@ -16,9 +16,9 @@ typedef struct heap_node {
 #define INITIAL_PAGES 16
 
 static heap_node_t *head = NULL;
+static spinlock_t heap_lock = 0;
 
 void kheap_init(void) {
-    /* Reservar unas cuantas páginas iniciales para el montón */
     for (size_t i = 0; i < INITIAL_PAGES; i++) {
         void *phys = pmm_alloc_page();
         vmm_map(vmm_get_kernel_pagemap(), HEAP_START + (i * PAGE_SIZE), (uintptr_t)phys, PTE_PRESENT | PTE_WRITABLE);
@@ -31,6 +31,7 @@ void kheap_init(void) {
 }
 
 void *kmalloc(size_t size) {
+    spin_lock(&heap_lock);
     heap_node_t *curr = head;
     while (curr) {
         if (curr->free && curr->size >= size) {
@@ -44,15 +45,18 @@ void *kmalloc(size_t size) {
                 curr->next = new_node;
             }
             curr->free = false;
+            spin_unlock(&heap_lock);
             return (void *)((uint8_t *)curr + sizeof(heap_node_t));
         }
         curr = curr->next;
     }
+    spin_unlock(&heap_lock);
     return NULL;
 }
 
 void kfree(void *ptr) {
     if (!ptr) return;
+    spin_lock(&heap_lock);
     heap_node_t *node = (heap_node_t *)((uint8_t *)ptr - sizeof(heap_node_t));
     node->free = true;
 
@@ -60,4 +64,5 @@ void kfree(void *ptr) {
         node->size += sizeof(heap_node_t) + node->next->size;
         node->next = node->next->next;
     }
+    spin_unlock(&heap_lock);
 }
