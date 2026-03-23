@@ -12,6 +12,8 @@
 #include "sched.h"
 #include "ipc.h"
 #include "syscall.h"
+#include "vfs.h"
+#include "initrd.h"
 #include "drivers/video.h"
 
 /* Marcadores del protocolo Limine */
@@ -21,19 +23,36 @@ __attribute__((used, section(".requests"))) volatile struct limine_memmap_reques
 __attribute__((used, section(".requests"))) volatile struct limine_hhdm_request hhdm_request = { .id = LIMINE_HHDM_REQUEST, .revision = 0 };
 __attribute__((used, section(".requests"))) volatile struct limine_kernel_address_request kernel_address_request = { .id = LIMINE_KERNEL_ADDRESS_REQUEST, .revision = 0 };
 
+/* Solicitud para modulos (Initrd) */
+__attribute__((used, section(".requests"))) volatile struct limine_module_request module_request = {
+    .id = LIMINE_MODULE_REQUEST,
+    .revision = 0
+};
+
 static void hlt(void) { for (;;) { __asm__("hlt"); } }
 
-/* Tarea de UI: Maneja el teclado y la pantalla */
 void ui_task(void) {
     ipc_msg_t msg;
     uint32_t x = 10, y = 150;
 
     video_draw_string("Carley Kernel v0.1", 10, 10, 0xFFFFFF);
+
+    /* Intentar leer archivo del Initrd */
+    vfs_node_t *node = vfs_open("welcome.txt");
+    if (node) {
+        char buffer[128];
+        memset(buffer, 0, 128);
+        vfs_read(node, 0, node->size, (uint8_t *)buffer);
+        video_draw_string(buffer, 10, 110, 0xFFFF00);
+    } else {
+        video_draw_string("welcome.txt no encontrado en Initrd", 10, 110, 0xFF0000);
+    }
+
     video_draw_string("Escribe algo:", 10, 130, 0xAAAAAA);
 
     for (;;) {
         if (ipc_recv(&msg) == 0) {
-            if (msg.sender == 100) { // Teclado
+            if (msg.sender == 100) {
                 char c = (char)msg.data[0];
                 video_draw_char(c, x, y, 0x00FF00);
                 x += 8;
@@ -57,18 +76,21 @@ void draw_logo(void) {
 void kmain(void) {
     if (LIMINE_BASE_REVISION_SUPPORTED == false) hlt();
 
-    /* 1. Inicializar Memoria y CPU básica */
     pmm_init();
     vmm_init();
     kheap_init();
     gdt_init();
     idt_init();
-
-    /* 2. Inicializar Planificador y Syscalls */
     sched_init();
     syscall_init();
+    vfs_init();
 
-    /* 3. Inicializar Hardware (Timers, Pantalla) */
+    /* Inicializar Initrd si existe un modulo cargado */
+    if (module_request.response && module_request.response->module_count > 0) {
+        struct limine_file *module = module_request.response->modules[0];
+        vfs_root = initrd_init(module->address, module->size);
+    }
+
     pit_init(100);
     if (framebuffer_request.response == NULL || framebuffer_request.response->framebuffer_count < 1) hlt();
     struct limine_framebuffer *fb = framebuffer_request.response->framebuffers[0];
@@ -76,14 +98,7 @@ void kmain(void) {
     video_clear(0x1E1E1E);
     draw_logo();
 
-    /* 4. Crear tarea inicial */
     sched_create_task(ui_task, false);
-
-    /* 5. Habilitar Interrupciones y saltar al primer hilo */
     __asm__ volatile("sti");
-
-    /* Bucle de espera (el scheduler tomará el control al primer tick del PIT) */
-    for (;;) {
-        __asm__("hlt");
-    }
+    for (;;) hlt();
 }

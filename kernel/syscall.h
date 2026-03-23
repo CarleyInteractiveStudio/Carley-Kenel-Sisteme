@@ -8,11 +8,11 @@
 #define SYS_YIELD     0
 #define SYS_IPC_SEND  1
 #define SYS_IPC_RECV  2
+#define SYS_OPEN      3
+#define SYS_READ      4
+#define SYS_CLOSE     5
 
-/* Inicializa el mecanismo de syscalls (SYSCALL/SYSRET en x86_64) */
 void syscall_init(void);
-
-/* Manejador de llamadas al sistema en C */
 context_t *syscall_handler(context_t *ctx);
 
 #endif
