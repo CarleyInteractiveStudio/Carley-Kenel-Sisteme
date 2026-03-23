@@ -31,7 +31,6 @@ static uint64_t *get_next_table(uint64_t *table, uint64_t index, bool allocate) 
     void *new_table = pmm_alloc_page();
     if (!new_table) return NULL;
     memset(phys_to_virt((uintptr_t)new_table), 0, PAGE_SIZE);
-    /* Solo permitimos acceso USER a las tablas de páginas internas si es necesario */
     table[index] = (uintptr_t)new_table | PTE_PRESENT | PTE_WRITABLE | PTE_USER;
     return phys_to_virt((uintptr_t)new_table);
 }
@@ -41,19 +40,29 @@ void vmm_init(void) {
     kernel_pml4 = phys_to_virt((uintptr_t)pml4_phys);
     memset(kernel_pml4, 0, PAGE_SIZE);
 
-    /* Mapear los primeros 4GB de memoria física (HHDM) */
     uint64_t offset = get_hhdm_offset();
     for (uintptr_t i = 0; i < 0x100000000; i += PAGE_SIZE) {
         vmm_map(kernel_pml4, i + offset, i, PTE_PRESENT | PTE_WRITABLE);
     }
 
-    /* Mapear el kernel (SIN el flag PTE_USER para seguridad) */
     struct limine_kernel_address_response *ka = kernel_address_request.response;
     for (uintptr_t i = 0; i < 0x2000000; i += PAGE_SIZE) {
         vmm_map(kernel_pml4, ka->virtual_base + i, ka->physical_base + i, PTE_PRESENT | PTE_WRITABLE);
     }
 
     vmm_switch_pagemap(kernel_pml4);
+}
+
+uint64_t *vmm_create_pagemap(void) {
+    void *pml4_phys = pmm_alloc_page();
+    uint64_t *pml4 = phys_to_virt((uintptr_t)pml4_phys);
+    memset(pml4, 0, PAGE_SIZE);
+
+    /* Copiar la mitad superior (Kernel) del PML4 global */
+    for (int i = 256; i < 512; i++) {
+        pml4[i] = kernel_pml4[i];
+    }
+    return pml4;
 }
 
 void vmm_map(uint64_t *pml4, uintptr_t virt, uintptr_t phys, uint64_t flags) {

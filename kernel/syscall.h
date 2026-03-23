@@ -11,6 +11,7 @@
 #define SYS_OPEN      3
 #define SYS_READ      4
 #define SYS_CLOSE     5
+#define SYS_WRITE     6
 
 void syscall_init(void);
 context_t *syscall_handler(context_t *ctx);

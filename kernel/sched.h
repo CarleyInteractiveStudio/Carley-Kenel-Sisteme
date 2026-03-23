@@ -19,6 +19,7 @@ typedef struct task {
     uint64_t id;
     context_t *context;
     void *stack_base;
+    void *kernel_stack; // Stack para el kernel durante interrupciones
     uint64_t *pml4;
     task_state_t state;
     struct task *next;

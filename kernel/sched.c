@@ -2,7 +2,7 @@
 #include "pmm.h"
 #include "vmm.h"
 #include "kheap.h"
-#include "gdt.h" // Necesario para actualizar el TSS
+#include "gdt.h"
 #include "common/string.h"
 #include "common/limine.h"
 
@@ -27,11 +27,29 @@ task_t *sched_create_task(void (*entry)(void), bool user) {
     task_t *new_task = kmalloc(sizeof(task_t));
     new_task->id = next_id++;
     new_task->state = TASK_READY;
-    new_task->pml4 = vmm_get_kernel_pagemap();
 
-    void *stack_phys = pmm_alloc_pages(2);
+    /* Asignar un mapa de páginas aislado para cada tarea */
+    if (user) {
+        new_task->pml4 = vmm_create_pagemap();
+    } else {
+        new_task->pml4 = vmm_get_kernel_pagemap();
+    }
+
     uint64_t hhdm_offset = hhdm_request.response->offset;
-    uintptr_t stack_virt = (uintptr_t)stack_phys + hhdm_offset;
+    void *kstack_phys = pmm_alloc_pages(2);
+    new_task->kernel_stack = (void *)((uintptr_t)kstack_phys + hhdm_offset);
+
+    uintptr_t stack_virt;
+    if (user) {
+        void *ustack_phys = pmm_alloc_pages(2);
+        stack_virt = 0x70000000000; // Pila de usuario aislada
+        for(size_t i = 0; i < 2; i++) {
+            vmm_map(new_task->pml4, stack_virt + (i * PAGE_SIZE), (uintptr_t)ustack_phys + (i * PAGE_SIZE), PTE_PRESENT | PTE_WRITABLE | PTE_USER);
+        }
+    } else {
+        stack_virt = (uintptr_t)new_task->kernel_stack;
+    }
+
     new_task->stack_base = (void *)stack_virt;
 
     context_t *ctx = (context_t *)(stack_virt + STACK_SIZE - sizeof(context_t));
@@ -39,14 +57,14 @@ task_t *sched_create_task(void (*entry)(void), bool user) {
 
     ctx->rip = (uint64_t)entry;
     ctx->rsp = (uint64_t)ctx;
-    ctx->rflags = 0x202; // IF=1
+    ctx->rflags = 0x202;
 
     if (user) {
-        ctx->cs = 0x1B; // User Code
-        ctx->ss = 0x23; // User Data
+        ctx->cs = 0x1B;
+        ctx->ss = 0x23;
     } else {
-        ctx->cs = 0x08; // Kernel Code
-        ctx->ss = 0x10; // Kernel Data
+        ctx->cs = 0x08;
+        ctx->ss = 0x10;
     }
 
     new_task->context = ctx;
@@ -58,11 +76,8 @@ task_t *sched_create_task(void (*entry)(void), bool user) {
 
 context_t *sched_schedule(context_t *current_context) {
     if (!current_task) return current_context;
-
     current_task->context = current_context;
-    if (current_task->state == TASK_RUNNING) {
-        current_task->state = TASK_READY;
-    }
+    if (current_task->state == TASK_RUNNING) current_task->state = TASK_READY;
 
     task_t *next_task = current_task->next;
     while (next_task->state != TASK_READY && next_task->state != TASK_RUNNING) {
@@ -72,9 +87,10 @@ context_t *sched_schedule(context_t *current_context) {
     current_task = next_task;
     current_task->state = TASK_RUNNING;
 
-    /* ACTUALIZACIÓN CRÍTICA: Actualizar la pila del kernel en el TSS */
-    /* Cuando ocurra una interrupción en Ring 3, la CPU saltará a esta dirección */
-    tss_set_rsp0((uint64_t)current_task->stack_base + STACK_SIZE);
+    /* CAMBIO DE CONTEXTO DE MEMORIA: Cargar el PML4 de la tarea */
+    vmm_switch_pagemap(current_task->pml4);
+
+    tss_set_rsp0((uint64_t)current_task->kernel_stack + STACK_SIZE);
 
     return current_task->context;
 }
