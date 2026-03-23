@@ -10,7 +10,6 @@
 
 struct vfs_node;
 
-/* Estructura para entradas de directorio */
 typedef struct {
     char name[128];
     uint32_t size;
@@ -35,7 +34,9 @@ typedef struct vfs_node {
 extern vfs_node_t *vfs_root;
 
 void vfs_init(void);
+void vfs_mount(vfs_node_t *node);
 uint32_t vfs_read(vfs_node_t *node, uint32_t offset, uint32_t size, uint8_t *buffer);
+uint32_t vfs_write(vfs_node_t *node, uint32_t offset, uint32_t size, uint8_t *buffer);
 vfs_node_t *vfs_open(const char *path);
 int vfs_readdir(vfs_node_t *node, uint32_t index, vfs_dirent_t *dirent);
 

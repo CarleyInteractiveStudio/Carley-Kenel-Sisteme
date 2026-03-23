@@ -14,6 +14,7 @@
 #include "syscall.h"
 #include "vfs.h"
 #include "initrd.h"
+#include "ramfs.h"
 #include "drivers/video.h"
 #include "elf.h"
 #include "keyboard_buf.h"
@@ -40,17 +41,21 @@ void kmain(void) {
     syscall_init();
     vfs_init();
 
-    /* Cargar todos los archivos del Initrd como archivos individuales */
-    initrd_load_all(module_request.response);
+    if (module_request.response && module_request.response->module_count > 0) {
+        initrd_load_all(module_request.response);
+    }
+
+    /* Inicializar y montar RamFS */
+    vfs_node_t *ram_root = ramfs_init();
+    vfs_mount(ram_root);
+    ramfs_create("test.txt", 1024);
 
     pit_init(100);
     if (framebuffer_request.response == NULL || framebuffer_request.response->framebuffer_count < 1) hlt();
     struct limine_framebuffer *fb = framebuffer_request.response->framebuffers[0];
-
     video_init(fb);
     video_clear(0x1E1E1E);
 
-    /* CARGAR EL SHELL */
     elf_load("shell.elf");
 
     __asm__ volatile("sti");

@@ -4,31 +4,30 @@
 #include "kheap.h"
 #include "spinlock.h"
 
-typedef struct ipc_node {
-    ipc_msg_t msg;
-    struct ipc_node *next;
-} ipc_node_t;
-
-static ipc_node_t *global_queue = NULL;
 static spinlock_t ipc_lock = 0;
 
 int ipc_send(uint64_t dest_id, ipc_msg_t *msg) {
-    (void)dest_id;
+    task_t *dest = (dest_id == 0) ? sched_get_current_task() : sched_get_task_by_id(dest_id);
+    if (!dest) return -1;
+
     spin_lock(&ipc_lock);
 
-    ipc_node_t *node = kmalloc(sizeof(ipc_node_t));
+    struct ipc_msg_node *node = kmalloc(sizeof(struct ipc_msg_node));
     if (!node) {
         spin_unlock(&ipc_lock);
         return -1;
     }
 
-    memcpy(&node->msg, msg, sizeof(ipc_msg_t));
+    node->sender = msg->sender;
+    node->type = msg->type;
+    memcpy(node->data, msg->data, sizeof(uint64_t) * 4);
     node->next = NULL;
 
-    if (!global_queue) {
-        global_queue = node;
+    /* Añadir a la cola del proceso destino */
+    if (!dest->msg_queue) {
+        dest->msg_queue = node;
     } else {
-        ipc_node_t *curr = global_queue;
+        struct ipc_msg_node *curr = dest->msg_queue;
         while (curr->next) curr = curr->next;
         curr->next = node;
     }
@@ -38,15 +37,20 @@ int ipc_send(uint64_t dest_id, ipc_msg_t *msg) {
 }
 
 int ipc_recv(ipc_msg_t *msg) {
+    task_t *curr_task = sched_get_current_task();
+
     spin_lock(&ipc_lock);
-    if (!global_queue) {
+    if (!curr_task->msg_queue) {
         spin_unlock(&ipc_lock);
         return -1;
     }
 
-    ipc_node_t *node = global_queue;
-    memcpy(msg, &node->msg, sizeof(ipc_msg_t));
-    global_queue = node->next;
+    struct ipc_msg_node *node = curr_task->msg_queue;
+    msg->sender = node->sender;
+    msg->type = node->type;
+    memcpy(msg->data, node->data, sizeof(uint64_t) * 4);
+
+    curr_task->msg_queue = node->next;
     kfree(node);
 
     spin_unlock(&ipc_lock);

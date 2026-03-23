@@ -36,7 +36,8 @@ iso: $(KERNEL) userland
 	cp limine.conf iso_root/boot/
 	cp user/shell.elf iso_root/shell.elf
 	cp user/hello.elf iso_root/hello.elf
-	@echo "ISO lista con Shell y Hello."
+	cp user/write.elf iso_root/write.elf
+	@echo "ISO lista con utilidades de escritura."
 
 clean:
 	rm -rf $(OBJ) $(KERNEL) carley-kernel.iso iso_root

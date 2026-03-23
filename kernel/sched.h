@@ -15,14 +15,26 @@ typedef enum {
     TASK_RUNNING, TASK_READY, TASK_SLEEPING, TASK_DEAD
 } task_state_t;
 
+/* Estructura para la cola de mensajes IPC */
+struct ipc_msg_node {
+    uint64_t sender;
+    uint64_t type;
+    uint64_t data[4];
+    struct ipc_msg_node *next;
+};
+
 typedef struct task {
     uint64_t id;
     context_t *context;
     void *stack_base;
     void *kernel_stack;
     uint64_t *pml4;
-    uintptr_t heap_end; // Fin actual del heap del proceso
+    uintptr_t heap_end;
     task_state_t state;
+
+    /* Cola de mensajes propia del proceso */
+    struct ipc_msg_node *msg_queue;
+
     struct task *next;
 } task_t;
 
@@ -32,5 +44,6 @@ context_t *sched_schedule(context_t *current_context);
 void sched_yield(void);
 void sched_terminate_task(void);
 task_t *sched_get_current_task(void);
+task_t *sched_get_task_by_id(uint64_t id);
 
 #endif

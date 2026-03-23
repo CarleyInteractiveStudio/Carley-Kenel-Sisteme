@@ -56,6 +56,9 @@ context_t *syscall_handler(context_t *ctx) {
                     if (term_x > 600) { term_x = 10; term_y += 10; }
                 }
                 ctx->rax = ctx->rdx;
+            } else {
+                /* Soporte para escritura en archivos reales del VFS */
+                ctx->rax = vfs_write((vfs_node_t *)ctx->rdi, 0, (uint32_t)ctx->rdx, (uint8_t *)ctx->rsi);
             }
             break;
 
@@ -83,7 +86,6 @@ context_t *syscall_handler(context_t *ctx) {
         }
 
         case SYS_SPAWN:
-            /* RDI = path */
             ctx->rax = elf_load((const char *)ctx->rdi);
             break;
 
