@@ -2,22 +2,12 @@
 #include <stddef.h>
 #include <stdbool.h>
 #include "common/limine.h"
-#include "common/string.h" // Cambiado para usar nuestra cabecera
+#include "common/string.h"
 #include "pmm.h"
 
 /* Estructura para el mapa de memoria de Limine */
-__attribute__((used, section(".requests")))
-volatile struct limine_memmap_request memmap_request = {
-    .id = LIMINE_MEMMAP_REQUEST,
-    .revision = 0
-};
-
-/* Solicitud para el Higher Half Direct Map (HHDM) */
-__attribute__((used, section(".requests")))
-volatile struct limine_hhdm_request hhdm_request = {
-    .id = LIMINE_HHDM_REQUEST,
-    .revision = 0
-};
+extern volatile struct limine_memmap_request memmap_request;
+extern volatile struct limine_hhdm_request hhdm_request;
 
 /* Variables globales para el estado del PMM */
 static uint8_t *bitmap = NULL;
@@ -26,7 +16,6 @@ static uint64_t free_pages = 0;
 static uint64_t last_index = 0;
 static uint64_t hhdm_offset = 0;
 
-/* Funciones auxiliares para manipular el bitmap */
 static inline void bitmap_set(uint64_t index) {
     bitmap[index / 8] |= (1 << (index % 8));
 }
@@ -43,37 +32,33 @@ void pmm_init(void) {
     struct limine_memmap_response *memmap = memmap_request.response;
     if (memmap == NULL) return;
 
-    if (hhdm_request.response) {
-        hhdm_offset = hhdm_request.response->offset;
-    }
+    if (hhdm_request.response) hhdm_offset = hhdm_request.response->offset;
 
     uint64_t highest_address = 0;
     for (uint64_t i = 0; i < memmap->entry_count; i++) {
         struct limine_memmap_entry *entry = memmap->entries[i];
-        if (entry->type == LIMINE_MEMMAP_USABLE ||
-            entry->type == LIMINE_MEMMAP_BOOTLOADER_RECLAIMABLE) {
+        if (entry->type == LIMINE_MEMMAP_USABLE || entry->type == LIMINE_MEMMAP_BOOTLOADER_RECLAIMABLE) {
             uint64_t top = entry->base + entry->length;
             if (top > highest_address) highest_address = top;
         }
     }
 
     total_pages = highest_address / PAGE_SIZE;
-    uint64_t bitmap_size = total_pages / 8;
+    uint64_t bitmap_size = (total_pages / 8);
+    /* Alineamos el tamaño del bitmap al tamaño de página */
+    bitmap_size = (bitmap_size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
 
-    /* Buscar hueco para el bitmap */
     for (uint64_t i = 0; i < memmap->entry_count; i++) {
         struct limine_memmap_entry *entry = memmap->entries[i];
         if (entry->type == LIMINE_MEMMAP_USABLE && entry->length >= bitmap_size) {
             bitmap = (uint8_t *)(entry->base + hhdm_offset);
             memset(bitmap, 0xff, bitmap_size);
-
             entry->base += bitmap_size;
             entry->length -= bitmap_size;
             break;
         }
     }
 
-    /* Marcar como libres las regiones usables */
     for (uint64_t i = 0; i < memmap->entry_count; i++) {
         struct limine_memmap_entry *entry = memmap->entries[i];
         if (entry->type == LIMINE_MEMMAP_USABLE) {
@@ -105,6 +90,24 @@ void *pmm_alloc_page(void) {
     return NULL;
 }
 
+void *pmm_alloc_pages(size_t count) {
+    size_t consecutive = 0;
+    for (uint64_t i = 0; i < total_pages; i++) {
+        if (!bitmap_test(i)) {
+            consecutive++;
+            if (consecutive == count) {
+                uint64_t start = i - count + 1;
+                for (uint64_t j = start; j <= i; j++) bitmap_set(j);
+                free_pages -= count;
+                return (void *)(start * PAGE_SIZE);
+            }
+        } else {
+            consecutive = 0;
+        }
+    }
+    return NULL;
+}
+
 void pmm_free_page(void *ptr) {
     uint64_t index = (uint64_t)ptr / PAGE_SIZE;
     if (index >= total_pages) return;
@@ -112,6 +115,12 @@ void pmm_free_page(void *ptr) {
         bitmap_clear(index);
         free_pages++;
         if (index < last_index) last_index = index;
+    }
+}
+
+void pmm_free_pages(void *ptr, size_t count) {
+    for (size_t i = 0; i < count; i++) {
+        pmm_free_page((void *)((uintptr_t)ptr + (i * PAGE_SIZE)));
     }
 }
 

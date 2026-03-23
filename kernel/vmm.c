@@ -7,11 +7,7 @@
 #include "pmm.h"
 
 /* Solicitud para el kernel address */
-__attribute__((used, section(".requests")))
-volatile struct limine_kernel_address_request kernel_address_request = {
-    .id = LIMINE_KERNEL_ADDRESS_REQUEST,
-    .revision = 0
-};
+extern volatile struct limine_kernel_address_request kernel_address_request;
 
 /* Solicitud para el HHDM */
 extern volatile struct limine_hhdm_request hhdm_request;

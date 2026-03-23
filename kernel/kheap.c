@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include <stddef.h>
+#include <stdbool.h>
 #include "kheap.h"
 #include "pmm.h"
 #include "vmm.h"
@@ -33,7 +34,6 @@ void *kmalloc(size_t size) {
     heap_node_t *curr = head;
     while (curr) {
         if (curr->free && curr->size >= size) {
-            /* Si hay suficiente espacio extra, dividir el nodo */
             if (curr->size > size + sizeof(heap_node_t) + 8) {
                 heap_node_t *new_node = (heap_node_t *)((uint8_t *)curr + sizeof(heap_node_t) + size);
                 new_node->size = curr->size - size - sizeof(heap_node_t);
@@ -48,7 +48,7 @@ void *kmalloc(size_t size) {
         }
         curr = curr->next;
     }
-    return NULL; // El montón se ha agotado
+    return NULL;
 }
 
 void kfree(void *ptr) {
@@ -56,7 +56,6 @@ void kfree(void *ptr) {
     heap_node_t *node = (heap_node_t *)((uint8_t *)ptr - sizeof(heap_node_t));
     node->free = true;
 
-    /* Fusión básica con el siguiente nodo si también está libre */
     if (node->next && node->next->free) {
         node->size += sizeof(heap_node_t) + node->next->size;
         node->next = node->next->next;
