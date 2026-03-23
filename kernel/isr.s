@@ -4,8 +4,8 @@
 .global isr\num
 isr\num:
     cli
-    push $0             # Error code dummy
-    push $\num           # Numero de interrupcion
+    push $0
+    push $\num
     jmp isr_common_stub
 .endm
 
@@ -13,7 +13,7 @@ isr\num:
 .global isr\num
 isr\num:
     cli
-    push $\num           # Numero de interrupcion
+    push $\num
     jmp isr_common_stub
 .endm
 
@@ -21,41 +21,40 @@ isr\num:
 .global irq\num
 irq\num:
     cli
-    push $0             # Error code dummy
-    push $\map           # Numero de interrupcion
+    push $0
+    push $\map
     jmp isr_common_stub
 .endm
 
-# Excepciones (0-31)
+# Excepciones individuales para depuración
 ISR_NOERR 0; ISR_NOERR 1; ISR_NOERR 2; ISR_NOERR 3; ISR_NOERR 4; ISR_NOERR 5; ISR_NOERR 6; ISR_NOERR 7
-ISR_ERR 8; ISR_NOERR 9; ISR_ERR 10; ISR_ERR 11; ISR_ERR 12; ISR_ERR 13; ISR_ERR 14; ISR_NOERR 15
-ISR_NOERR 16; ISR_ERR 17; ISR_NOERR 18; ISR_NOERR 19; ISR_NOERR 20; ISR_ERR 30
+ISR_ERR 8; ISR_ERR 10; ISR_ERR 11; ISR_ERR 12; ISR_ERR 13; ISR_ERR 14
+ISR_NOERR 15; ISR_NOERR 16; ISR_ERR 17; ISR_NOERR 18; ISR_NOERR 19; ISR_NOERR 20; ISR_ERR 30
 
 # IRQs
 IRQ 0, 32
 
+# Syscalls
+.global isr128
+isr128:
+    cli
+    push $0
+    push $128
+    jmp isr_common_stub
+
 isr_common_stub:
-    # 1. Guardar todos los registros generales (de RAX a R15)
     push %rax; push %rbx; push %rcx; push %rdx; push %rdi; push %rsi; push %rbp; push %r8
     push %r9; push %r10; push %r11; push %r12; push %r13; push %r14; push %r15
 
-    # 2. Pasar el contexto actual a irq_handler (rsi = puntero al stack)
-    # RDI ya tiene el int_no que fue empujado por la CPU/macro (pero no, está en el stack)
-    # Corregimos:
-    mov 15*8(%rsp), %rdi      # int_no (está 15 registros arriba en el stack)
+    mov 15*8(%rsp), %rdi      # int_no
     mov %rsp, %rsi            # context_ptr
 
-    call irq_handler          # irq_handler devuelve el nuevo RSP en RAX
+    call irq_handler
 
-    # 3. Cambiar el stack pointer al nuevo contexto (si hubo cambio de tarea)
     mov %rax, %rsp
 
-    # 4. Restaurar todos los registros generales
     pop %r15; pop %r14; pop %r13; pop %r12; pop %r11; pop %r10; pop %r9; pop %r8
     pop %rbp; pop %rsi; pop %rdi; pop %rdx; pop %rcx; pop %rbx; pop %rax
 
-    # 5. Limpiar int_no y error_code
     add $16, %rsp
-
-    # 6. Volver de la interrupción (restaura CS, RIP, RFLAGS, RSP, SS automáticamente)
     iretq

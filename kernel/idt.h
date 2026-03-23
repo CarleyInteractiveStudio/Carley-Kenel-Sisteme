@@ -2,6 +2,7 @@
 #define IDT_H
 
 #include <stdint.h>
+#include "sched.h"
 
 /* Estructura para una entrada de la IDT (64 bits) */
 typedef struct {
@@ -22,5 +23,8 @@ typedef struct {
 
 /* Inicializa la Tabla de Descriptores de Interrupciones */
 void idt_init(void);
+
+/* Configura una entrada específica de la IDT */
+void idt_set_gate(uint8_t num, uint64_t base, uint16_t sel, uint8_t flags);
 
 #endif

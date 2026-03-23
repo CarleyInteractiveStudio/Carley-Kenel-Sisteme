@@ -11,6 +11,7 @@
 #include "pit.h"
 #include "sched.h"
 #include "ipc.h"
+#include "syscall.h"
 
 /* Marcadores del protocolo Limine */
 __attribute__((used, section(".requests"))) volatile LIMINE_BASE_REVISION(2);
@@ -21,71 +22,69 @@ __attribute__((used, section(".requests"))) volatile struct limine_kernel_addres
 
 static struct limine_framebuffer *fb;
 
-/* Tarea 1: Productor de mensajes */
-void task1(void) {
-    uint32_t colors[] = {0xFF0000, 0x00FF00, 0x0000FF, 0xFFFF00};
-    int i = 0;
-
+/* Función auxiliar para detener la CPU */
+static void hlt(void) {
     for (;;) {
-        ipc_msg_t msg;
-        msg.sender = 1;
-        msg.type = 0xAA;
-        msg.data[0] = colors[i];
-
-        /* Enviar mensaje de color a task2 (ID=2) */
-        ipc_send(2, &msg);
-
-        i = (i + 1) % 4;
-
-        /* Esperar un poco (ticks del PIT) para no saturar el IPC */
-        uint64_t target_tick = pit_get_ticks() + 10;
-        while (pit_get_ticks() < target_tick) sched_yield();
+        __asm__("hlt");
     }
 }
 
-/* Tarea 2: Consumidor de mensajes y Pintor */
+/* Wrapper para syscalls */
+static inline void syscall_yield(void) { __asm__ volatile("int $0x80" : : "a"(SYS_YIELD)); }
+static inline int syscall_ipc_send(uint64_t dest, void *msg) { int ret; __asm__ volatile("int $0x80" : "=a"(ret) : "a"(SYS_IPC_SEND), "D"(dest), "S"(msg)); return ret; }
+static inline int syscall_ipc_recv(void *msg) { int ret; __asm__ volatile("int $0x80" : "=a"(ret) : "a"(SYS_IPC_RECV), "D"(msg)); return ret; }
+
+/* Tarea 1: Productor (Simula espacio de usuario) */
+void task1(void) {
+    uint32_t colors[] = {0xFF0000, 0x00FF00, 0x0000FF, 0xFFFF00};
+    int i = 0;
+    for (;;) {
+        ipc_msg_t msg;
+        msg.sender = 1;
+        msg.data[0] = colors[i];
+        syscall_ipc_send(2, &msg);
+        i = (i + 1) % 4;
+        uint64_t target_tick = pit_get_ticks() + 10;
+        while (pit_get_ticks() < target_tick) syscall_yield();
+    }
+}
+
+/* Tarea 2: Consumidor (Simula espacio de usuario) */
 void task2(void) {
     ipc_msg_t msg;
     uint32_t color = 0x000000;
-
     for (;;) {
-        /* Recibir mensaje. Nota: en esta demo ID receptor = 0 (por simplificar ipc_recv) */
-        // Pero hemos diseñado ipc_send para ID=2.
-        // Corregimos ipc_recv para que acepte cualquier ID por ahora o sea para el actual.
-
-        if (ipc_recv(&msg) == 0) {
+        if (syscall_ipc_recv(&msg) == 0) {
             color = (uint32_t)msg.data[0];
         }
-
-        /* Pintar cuadrado */
         for (uint64_t i = 110; i < 210; i++) {
             for (uint64_t j = 0; j < 100; j++) {
                 ((uint32_t *)fb->address)[i * (fb->pitch / 4) + j] = color;
             }
         }
-        sched_yield();
+        syscall_yield();
     }
 }
 
 /* Punto de entrada del kernel */
 void kmain(void) {
-    if (LIMINE_BASE_REVISION_SUPPORTED == false) { for (;;) __asm__("hlt"); }
+    if (LIMINE_BASE_REVISION_SUPPORTED == false) hlt();
 
     pmm_init();
     vmm_init();
     kheap_init();
     sched_init();
+    syscall_init();
     gdt_init();
     idt_init();
     pit_init(100);
 
-    if (framebuffer_request.response == NULL || framebuffer_request.response->framebuffer_count < 1) { for (;;) __asm__("hlt"); }
+    if (framebuffer_request.response == NULL || framebuffer_request.response->framebuffer_count < 1) hlt();
     fb = framebuffer_request.response->framebuffers[0];
 
-    sched_create_task(task1); // Tarea 1
-    sched_create_task(task2); // Tarea 2
+    /* Crear tareas simulando espacio de usuario (Ring 3) */
+    sched_create_task(task1, true); // true = USER
+    sched_create_task(task2, true); // true = USER
 
-    for (;;) {
-        __asm__("hlt");
-    }
+    for (;;) hlt();
 }

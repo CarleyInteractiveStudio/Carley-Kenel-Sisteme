@@ -17,12 +17,16 @@ Carley Kernel es un microkernel diseñado desde cero para x86_64, con un enfoque
 
 ### 2. Gestión de CPU y Multitarea (Implementado)
 - **GDT e IDT:** Configuración de descriptores y manejo de interrupciones/excepciones mediante un marco de pila robusto (`context_t`).
-- **Planificador (Scheduler):** Implementa un algoritmo Round-Robin que conmuta tareas mediante interrupciones de hardware (PIT).
-- **Context Switching:** Cambio de contexto completo que preserva todos los registros de la CPU, incluyendo punteros de pila dinámicos.
+- **TSS (Task State Segment):** Permite el cambio seguro de pila al entrar al kernel desde el espacio de usuario. El kernel actualiza el campo `rsp0` en cada cambio de contexto.
+- **Planificador (Scheduler):** Implementa un algoritmo Round-Robin que conmuta tareas mediante interrupciones de hardware (PIT). Soporta tanto tareas de Kernel (Ring 0) como de Usuario (Ring 3).
 
 ### 3. IPC (Inter-Process Communication) (Implementado)
 - **Mensajería Síncrona:** Sistema de colas de mensajes que permite la comunicación fluida entre hilos de ejecución.
-- *Nota:* La implementación actual utiliza una cola global simplificada para demostración en esta fase inicial.
 
-### 4. Syscalls (Próximamente)
-Interfaz mínima para que los servicios de usuario soliciten funciones al kernel.
+### 4. Syscalls (Implementado)
+- **Interfaz Ring 3:** Los procesos de usuario se comunican con el kernel mediante la interrupción `int $0x80`.
+- **Llamadas Disponibles:** `SYS_YIELD`, `SYS_IPC_SEND`, `SYS_IPC_RECV`.
+- **Aislamiento:** Las tareas en Ring 3 están aisladas mediante privilegios de CPU y permisos de página (U/S bit), garantizando la seguridad del sistema.
+
+### 5. Drivers (Próximamente)
+Controladores de hardware corriendo como servicios de usuario.
