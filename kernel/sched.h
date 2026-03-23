@@ -19,7 +19,7 @@ typedef struct task {
     uint64_t id;
     context_t *context;
     void *stack_base;
-    void *kernel_stack; // Stack para el kernel durante interrupciones
+    void *kernel_stack;
     uint64_t *pml4;
     task_state_t state;
     struct task *next;
@@ -29,5 +29,6 @@ void sched_init(void);
 task_t *sched_create_task(void (*entry)(void), bool user);
 context_t *sched_schedule(context_t *current_context);
 void sched_yield(void);
+void sched_terminate_task(void);
 
 #endif

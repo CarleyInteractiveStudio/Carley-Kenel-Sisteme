@@ -28,7 +28,6 @@ task_t *sched_create_task(void (*entry)(void), bool user) {
     new_task->id = next_id++;
     new_task->state = TASK_READY;
 
-    /* Asignar un mapa de páginas aislado para cada tarea */
     if (user) {
         new_task->pml4 = vmm_create_pagemap();
     } else {
@@ -42,7 +41,7 @@ task_t *sched_create_task(void (*entry)(void), bool user) {
     uintptr_t stack_virt;
     if (user) {
         void *ustack_phys = pmm_alloc_pages(2);
-        stack_virt = 0x70000000000; // Pila de usuario aislada
+        stack_virt = 0x70000000000;
         for(size_t i = 0; i < 2; i++) {
             vmm_map(new_task->pml4, stack_virt + (i * PAGE_SIZE), (uintptr_t)ustack_phys + (i * PAGE_SIZE), PTE_PRESENT | PTE_WRITABLE | PTE_USER);
         }
@@ -80,16 +79,19 @@ context_t *sched_schedule(context_t *current_context) {
     if (current_task->state == TASK_RUNNING) current_task->state = TASK_READY;
 
     task_t *next_task = current_task->next;
+    /* Evitar tareas muertas */
     while (next_task->state != TASK_READY && next_task->state != TASK_RUNNING) {
         next_task = next_task->next;
+        if (next_task == current_task && current_task->state == TASK_DEAD) {
+            /* Todo ha terminado o estamos en un deadlock de idle */
+            for (;;) __asm__("hlt");
+        }
     }
 
     current_task = next_task;
     current_task->state = TASK_RUNNING;
 
-    /* CAMBIO DE CONTEXTO DE MEMORIA: Cargar el PML4 de la tarea */
     vmm_switch_pagemap(current_task->pml4);
-
     tss_set_rsp0((uint64_t)current_task->kernel_stack + STACK_SIZE);
 
     return current_task->context;
@@ -97,4 +99,10 @@ context_t *sched_schedule(context_t *current_context) {
 
 void sched_yield(void) {
     __asm__ volatile("int $32");
+}
+
+void sched_terminate_task(void) {
+    if (current_task) {
+        current_task->state = TASK_DEAD;
+    }
 }

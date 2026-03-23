@@ -5,13 +5,14 @@
 #include "elf.h"
 #include "sched.h"
 #include "common/string.h"
+#include "common/limine.h"
 
 int elf_load(const char *path) {
-    /* Por simplicidad en la demo, como solo hay un archivo, usamos vfs_root directamente */
-    vfs_node_t *node = vfs_root;
+    vfs_node_t *node = vfs_open(path);
     if (!node) return -1;
 
     uint8_t *buffer = kmalloc(node->size);
+    if (!buffer) return -1;
     vfs_read(node, 0, node->size, buffer);
 
     Elf64_Ehdr *ehdr = (Elf64_Ehdr *)buffer;
@@ -31,8 +32,6 @@ int elf_load(const char *path) {
                 void *phys = pmm_alloc_page();
                 vmm_map(pagemap, phdrs[i].p_vaddr + (j * PAGE_SIZE), (uintptr_t)phys, PTE_PRESENT | PTE_WRITABLE | PTE_USER);
 
-                /* Copia simplificada: usamos el hecho de que el kernel tiene HHDM para escribir directo */
-                /* En un sistema real usaríamos un mapeo temporal o copiaríamos antes de cambiar CR3 */
                 extern volatile struct limine_hhdm_request hhdm_request;
                 uint64_t hhdm = hhdm_request.response->offset;
 

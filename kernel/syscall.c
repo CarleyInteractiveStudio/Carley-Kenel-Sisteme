@@ -3,8 +3,8 @@
 #include "sched.h"
 #include "vfs.h"
 #include "drivers/video.h"
+#include "keyboard_buf.h"
 
-/* Coordenadas globales para stdout (demo) */
 static uint32_t term_x = 10;
 static uint32_t term_y = 150;
 
@@ -28,7 +28,12 @@ context_t *syscall_handler(context_t *ctx) {
             break;
 
         case SYS_READ:
-            ctx->rax = vfs_read((vfs_node_t *)ctx->rdi, (uint32_t)ctx->rsi, (uint32_t)ctx->rdx, (uint8_t *)ctx->r10);
+            /* ARGUMENTOS: fd (RDI), buffer (RSI), size (RDX) */
+            if (ctx->rdi == 0) { // stdin
+                ctx->rax = kbd_buf_read((char *)ctx->rsi, (size_t)ctx->rdx);
+            } else {
+                ctx->rax = vfs_read((vfs_node_t *)ctx->rdi, 0, (uint32_t)ctx->rdx, (uint8_t *)ctx->rsi);
+            }
             break;
 
         case SYS_WRITE:
@@ -38,6 +43,9 @@ context_t *syscall_handler(context_t *ctx) {
                     if (buf[i] == '\n') {
                         term_x = 10;
                         term_y += 10;
+                    } else if (buf[i] == '\b') {
+                        if (term_x > 10) term_x -= 8;
+                        video_draw_rect(term_x, term_y, 8, 8, 0x1E1E1E);
                     } else {
                         video_draw_char(buf[i], term_x, term_y, 0xFFFFFF);
                         term_x += 8;
@@ -47,6 +55,14 @@ context_t *syscall_handler(context_t *ctx) {
                 ctx->rax = ctx->rdx;
             }
             break;
+
+        case SYS_READDIR:
+            ctx->rax = vfs_readdir((vfs_node_t *)ctx->rdi, (uint32_t)ctx->rsi, (vfs_dirent_t *)ctx->rdx);
+            break;
+
+        case SYS_EXIT:
+            sched_terminate_task();
+            return sched_schedule(ctx);
 
         default:
             ctx->rax = -1;

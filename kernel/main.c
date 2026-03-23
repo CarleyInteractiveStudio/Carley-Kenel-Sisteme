@@ -16,6 +16,7 @@
 #include "initrd.h"
 #include "drivers/video.h"
 #include "elf.h"
+#include "keyboard_buf.h"
 
 /* Marcadores del protocolo Limine */
 __attribute__((used, section(".requests"))) volatile LIMINE_BASE_REVISION(2);
@@ -35,6 +36,7 @@ void kmain(void) {
     kheap_init();
     gdt_init();
     idt_init();
+    kbd_buf_init();
     sched_init();
     syscall_init();
     vfs_init();
@@ -51,8 +53,8 @@ void kmain(void) {
     video_init(fb);
     video_clear(0x1E1E1E);
 
-    /* CARGAR EL PRIMER PROGRAMA DE USUARIO */
-    elf_load("/hello.elf");
+    /* LANZAR EL SHELL DEL CARLEY KERNEL */
+    elf_load("/shell.elf");
 
     __asm__ volatile("sti");
     for (;;) hlt();

@@ -34,9 +34,8 @@ iso: $(KERNEL) userland
 	mkdir -p iso_root/boot
 	cp $(KERNEL) iso_root/boot/
 	cp limine.conf iso_root/boot/
-	cp user/hello.elf iso_root/hello.elf
-	# Empaquetamos hello.elf como initrd (formato crudo por ahora)
-	@echo "ISO lista. El archivo hello.elf se usara como modulo de Limine."
+	cp user/shell.elf iso_root/shell.elf
+	@echo "ISO lista para empaquetar. El Shell se cargara como modulo."
 
 clean:
 	rm -rf $(OBJ) $(KERNEL) carley-kernel.iso iso_root

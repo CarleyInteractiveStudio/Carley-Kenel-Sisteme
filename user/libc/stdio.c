@@ -2,7 +2,6 @@
 #include "include/stdio.h"
 #include "include/string.h"
 
-/* Syscall wrappers (definidos en syscall.s) */
 extern long syscall1(int num, long arg1);
 extern long syscall3(int num, long arg1, long arg2, long arg3);
 
@@ -30,7 +29,7 @@ int printf(const char *format, ...) {
         if (*format == '%' && *(format + 1) == 's') {
             const char *s = va_arg(args, const char *);
             size_t len = strlen(s);
-            syscall3(SYS_WRITE, 1, (long)s, len); // Imprimir sin nueva línea extra
+            syscall3(SYS_WRITE, 1, (long)s, len); // Escritura directa sin newline
             format += 2;
         } else {
             putchar(*format++);

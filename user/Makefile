@@ -11,13 +11,16 @@ LIBC := libc.a
 
 .PHONY: all clean
 
-all: $(LIBC) hello.elf
+all: $(LIBC) hello.elf shell.elf
 
 $(LIBC): $(LIBC_OBJ)
 	$(AR) rcs $@ $(LIBC_OBJ)
 
 hello.elf: hello.o $(LIBC)
 	$(CC) $(LDFLAGS) -T linker.ld hello.o $(LIBC) -o $@
+
+shell.elf: shell.o $(LIBC)
+	$(CC) $(LDFLAGS) -T linker.ld shell.o $(LIBC) -o $@
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
@@ -26,4 +29,4 @@ hello.elf: hello.o $(LIBC)
 	$(AS) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -f $(LIBC_OBJ) $(LIBC) hello.o hello.elf
+	rm -f $(LIBC_OBJ) $(LIBC) hello.o hello.elf shell.o shell.elf
