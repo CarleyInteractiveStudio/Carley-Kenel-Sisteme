@@ -15,6 +15,8 @@
 #include "vfs.h"
 #include "initrd.h"
 #include "ramfs.h"
+#include "carleyfs.h" // Nuevo
+#include "drivers/ide.h" // Nuevo
 #include "drivers/video.h"
 #include "elf.h"
 #include "keyboard_buf.h"
@@ -45,6 +47,11 @@ void kmain(void) {
         initrd_load_all(module_request.response);
     }
 
+    /* Inicializar Drivers de Hardware Real */
+    ide_init();
+    vfs_node_t *disk_root = carleyfs_init();
+    vfs_mount(disk_root);
+
     vfs_node_t *ram_root = ramfs_init();
     vfs_mount(ram_root);
     ramfs_create("test.txt", 1024);
@@ -55,7 +62,6 @@ void kmain(void) {
     video_init(fb);
     video_clear(0x1E1E1E);
 
-    /* CARGAR EL SHELL COMO PROCESO INICIAL */
     elf_load("shell.elf");
 
     __asm__ volatile("sti");

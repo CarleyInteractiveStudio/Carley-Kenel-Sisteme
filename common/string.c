@@ -33,8 +33,9 @@ int strcmp(const char *s1, const char *s2) {
 
 int strncmp(const char *s1, const char *s2, size_t n) {
     while (n--) {
-        if (*s1 != *s2++) return *(unsigned char *)s1 - *(unsigned char *)-s2;
+        if (*s1 != *s2) return *(unsigned char *)s1 - *(unsigned char *)s2;
         if (*s1++ == 0) break;
+        s2++;
     }
     return 0;
 }
@@ -42,7 +43,7 @@ int strncmp(const char *s1, const char *s2, size_t n) {
 char *strcpy(char *dest, const char *src) {
     char *d = dest;
     while ((*d++ = *src++));
-    return d - 1;
+    return dest;
 }
 
 size_t strlen(const char *s) {

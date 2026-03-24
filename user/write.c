@@ -1,5 +1,5 @@
-#include "include/stdio.h"
-#include "include/string.h"
+#include <stdio.h>
+#include <string.h>
 #include <stdint.h>
 
 extern long syscall1(int num, long arg1);
@@ -11,7 +11,6 @@ extern long syscall3(int num, long arg1, long arg2, long arg3);
 void main(void) {
     printf("Carley Writer v0.1\n");
 
-    /* Intentar abrir el archivo de prueba en RamFS */
     void *file = (void *)syscall1(SYS_OPEN, (long)"ram/test.txt");
 
     if (file) {
