@@ -9,7 +9,7 @@ LDFLAGS := -nostdlib -static
 LIBC_OBJ := libc/string.o libc/stdio.o libc/stdlib.o libc/time.o libc/math.o libc/arch/x86_64/crt0.o libc/arch/x86_64/syscall.o
 LIBC := libc.a
 
-PROGS := hello.elf shell.elf write.elf edit.elf gui.elf casm.elf crun.elf calc.elf play.elf
+PROGS := hello.elf shell.elf write.elf edit.elf gui.elf casm.elf crun.elf calc.elf play.elf game.elf
 
 .PHONY: all clean
 

@@ -43,7 +43,7 @@ void main(void) {
     char cmd[64];
     int pos = 0;
 
-    printf("\nCarley Shell v0.4\n");
+    printf("\nCarley OS Shell v0.4\n");
 
     for (;;) {
         printf("> ");
@@ -62,7 +62,7 @@ void main(void) {
         }
 
         if (strcmp(cmd, "help") == 0) {
-            printf("Comandos: help, ls, cat, gui, mem, time, casm, crun, exit\n");
+            printf("Comandos: help, ls, cat, gui, game, mem, time, exit\n");
         } else if (strcmp(cmd, "ls") == 0) {
             shell_ls();
         } else if (strcmp(cmd, "time") == 0) {
@@ -72,6 +72,8 @@ void main(void) {
             printf("RAM Total: %d MB\n", (int)(total / 1024 / 1024));
         } else if (strcmp(cmd, "gui") == 0) {
             syscall1(SYS_SPAWN, (long)"gui.elf");
+        } else if (strcmp(cmd, "game") == 0) {
+            syscall1(SYS_SPAWN, (long)"game.elf");
         } else if (strcmp(cmd, "exit") == 0) {
             syscall1(SYS_EXIT, 0);
         } else if (strlen(cmd) > 0) {

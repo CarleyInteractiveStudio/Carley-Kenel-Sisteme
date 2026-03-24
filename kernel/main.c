@@ -18,7 +18,7 @@
 #include "carleyfs.h"
 #include "drivers/ide.h"
 #include "drivers/video.h"
-#include "drivers/audio.h" // Nuevo
+#include "drivers/audio.h"
 #include "drivers/composer.h"
 #include "elf.h"
 #include "keyboard_buf.h"
@@ -32,8 +32,23 @@ __attribute__((used, section(".requests"))) volatile struct limine_memmap_reques
 __attribute__((used, section(".requests"))) volatile struct limine_hhdm_request hhdm_request = { .id = LIMINE_HHDM_REQUEST, .revision = 0 };
 __attribute__((used, section(".requests"))) volatile struct limine_kernel_address_request kernel_address_request = { .id = LIMINE_KERNEL_ADDRESS_REQUEST, .revision = 0 };
 __attribute__((used, section(".requests"))) volatile struct limine_module_request module_request = { .id = LIMINE_MODULE_REQUEST, .revision = 0 };
+__attribute__((used, section(".requests"))) volatile struct limine_smp_request smp_request = { .id = LIMINE_SMP_REQUEST, .revision = 0 };
 
 static void hlt(void) { for (;;) { __asm__("hlt"); } }
+
+void ap_main(struct limine_smp_info *info) {
+    (void)info;
+    gdt_init();
+    for (;;) __asm__("hlt");
+}
+
+void draw_splash(void) {
+    video_clear(0x000000);
+    video_draw_string("CARLEY OS", 270, 200, 0xFFFFFF);
+    video_draw_rect(220, 230, 200, 10, 0x555555); // Background bar
+    video_draw_rect(220, 230, 50, 10, 0x3498DB);  // Progress bar
+    for(int i=0; i<10000000; i++) __asm__("pause");
+}
 
 void kmain(void) {
     if (LIMINE_BASE_REVISION_SUPPORTED == false) hlt();
@@ -55,16 +70,25 @@ void kmain(void) {
     ide_init();
     vfs_mount(carleyfs_init());
     vfs_mount(ramfs_init());
-
-    /* Inicializar Audio */
     audio_init();
+
+    if (smp_request.response) {
+        struct limine_smp_response *smp = smp_request.response;
+        for (uint64_t i = 0; i < smp->cpu_count; i++) {
+            struct limine_smp_info *cpu = smp->cpus[i];
+            if (cpu->lapic_id != smp->bsp_lapic_id) cpu->goto_address = ap_main;
+        }
+    }
 
     pit_init(100);
     if (framebuffer_request.response == NULL || framebuffer_request.response->framebuffer_count < 1) hlt();
     struct limine_framebuffer *fb = framebuffer_request.response->framebuffers[0];
     video_init(fb);
-    video_clear(0x1E1E1E);
 
+    /* Mostrar Splash Screen */
+    draw_splash();
+
+    video_clear(0x1E1E1E);
     mouse_init();
     composer_start();
     elf_load("shell.elf");
