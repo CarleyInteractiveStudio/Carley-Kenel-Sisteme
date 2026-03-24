@@ -16,6 +16,7 @@
 #define SYS_SBRK      9
 #define SYS_SPAWN     10
 #define SYS_GET_INFO  11
+#define SYS_TIME      12
 
 void syscall_init(void);
 context_t *syscall_handler(context_t *ctx);

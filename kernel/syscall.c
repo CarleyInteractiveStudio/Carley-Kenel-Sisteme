@@ -3,6 +3,7 @@
 #include "sched.h"
 #include "vfs.h"
 #include "drivers/video.h"
+#include "drivers/rtc.h" // Nuevo
 #include "keyboard_buf.h"
 #include "pmm.h"
 #include "vmm.h"
@@ -12,56 +13,29 @@ context_t *syscall_handler(context_t *ctx) {
     uint64_t sys_no = ctx->rax;
 
     switch (sys_no) {
-        case SYS_YIELD:
-            return sched_schedule(ctx);
-
-        case SYS_IPC_SEND:
-            ctx->rax = ipc_send(ctx->rdi, (void *)ctx->rsi);
-            break;
-
-        case SYS_IPC_RECV:
-            ctx->rax = ipc_recv((void *)ctx->rdi);
-            break;
-
-        case SYS_OPEN:
-            ctx->rax = (uintptr_t)vfs_open((const char *)ctx->rdi);
-            break;
-
+        case SYS_YIELD: return sched_schedule(ctx);
+        case SYS_IPC_SEND: ctx->rax = ipc_send(ctx->rdi, (void *)ctx->rsi); break;
+        case SYS_IPC_RECV: ctx->rax = ipc_recv((void *)ctx->rdi); break;
+        case SYS_OPEN: ctx->rax = (uintptr_t)vfs_open((const char *)ctx->rdi); break;
         case SYS_READ:
-            if (ctx->rdi == 0) {
-                ctx->rax = kbd_buf_read((char *)ctx->rsi, (size_t)ctx->rdx);
-            } else {
-                ctx->rax = vfs_read((vfs_node_t *)ctx->rdi, 0, (uint32_t)ctx->rdx, (uint8_t *)ctx->rsi);
-            }
+            if (ctx->rdi == 0) ctx->rax = kbd_buf_read((char *)ctx->rsi, (size_t)ctx->rdx);
+            else ctx->rax = vfs_read((vfs_node_t *)ctx->rdi, 0, (uint32_t)ctx->rdx, (uint8_t *)ctx->rsi);
             break;
-
         case SYS_WRITE:
-            if (ctx->rdi == 1) { // stdout
+            if (ctx->rdi == 1) {
                 char *buf = (char *)ctx->rsi;
-                for (size_t i = 0; i < ctx->rdx; i++) {
-                    video_terminal_write(buf[i], 0xFFFFFF);
-                }
+                for (size_t i = 0; i < ctx->rdx; i++) video_terminal_write(buf[i], 0xFFFFFF);
                 ctx->rax = ctx->rdx;
             } else {
                 ctx->rax = vfs_write((vfs_node_t *)ctx->rdi, 0, (uint32_t)ctx->rdx, (uint8_t *)ctx->rsi);
             }
             break;
-
-        case SYS_READDIR:
-            ctx->rax = vfs_readdir((vfs_node_t *)ctx->rdi, (uint32_t)ctx->rsi, (vfs_dirent_t *)ctx->rdx);
-            break;
-
+        case SYS_READDIR: ctx->rax = vfs_readdir((vfs_node_t *)ctx->rdi, (uint32_t)ctx->rsi, (vfs_dirent_t *)ctx->rdx); break;
         case SYS_CLOSE:
-            if (ctx->rdi < MAX_FILES_PER_TASK) {
-                sched_get_current_task()->files[ctx->rdi] = NULL;
-                ctx->rax = 0;
-            } else { ctx->rax = -1; }
+            if (ctx->rdi < MAX_FILES_PER_TASK) { sched_get_current_task()->files[ctx->rdi] = NULL; ctx->rax = 0; }
+            else { ctx->rax = -1; }
             break;
-
-        case SYS_EXIT:
-            sched_terminate_task();
-            return sched_schedule(ctx);
-
+        case SYS_EXIT: sched_terminate_task(); return sched_schedule(ctx);
         case SYS_SBRK: {
             task_t *curr = sched_get_current_task();
             uintptr_t old_heap = curr->heap_end;
@@ -74,29 +48,23 @@ context_t *syscall_handler(context_t *ctx) {
                     curr->heap_end += PAGE_SIZE;
                 }
             }
-            ctx->rax = old_heap;
-            break;
+            ctx->rax = old_heap; break;
         }
-
-        case SYS_SPAWN:
-            ctx->rax = elf_load((const char *)ctx->rdi);
-            break;
-
-        case SYS_GET_INFO: {
-            /* RDI: 0=RAM total, 1=RAM libre, 2=Num procesos */
+        case SYS_SPAWN: ctx->rax = elf_load_ext((const char *)ctx->rdi, (int)ctx->rsi, (char **)ctx->rdx); break;
+        case SYS_GET_INFO:
             if (ctx->rdi == 0) ctx->rax = pmm_get_total_memory();
             else if (ctx->rdi == 1) ctx->rax = pmm_get_free_memory();
-            else ctx->rax = 0; // Por implementar contador de tareas
+            else ctx->rax = 0;
+            break;
+        case SYS_TIME: {
+            /* RDI = rtc_time_t* */
+            rtc_get_time((rtc_time_t *)ctx->rdi);
+            ctx->rax = 0;
             break;
         }
-
-        default:
-            ctx->rax = -1;
-            break;
+        default: ctx->rax = -1; break;
     }
-
     return ctx;
 }
 
-void syscall_init(void) {
-}
+void syscall_init(void) {}

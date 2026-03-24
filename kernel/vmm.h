@@ -14,8 +14,9 @@ void vmm_map(uint64_t *pml4, uintptr_t virt, uintptr_t phys, uint64_t flags);
 void vmm_unmap(uint64_t *pml4, uintptr_t virt);
 void vmm_switch_pagemap(uint64_t *pml4);
 uint64_t *vmm_get_kernel_pagemap(void);
-
-/* Crea un nuevo mapa de páginas para un proceso, copiando las entradas del kernel */
 uint64_t *vmm_create_pagemap(void);
+
+/* Nueva: convierte direccion virtual de un pagemap especifico a fisica */
+uintptr_t virt_to_phys_in_pagemap(uint64_t *pml4, uintptr_t virt);
 
 #endif

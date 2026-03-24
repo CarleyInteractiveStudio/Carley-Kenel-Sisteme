@@ -9,7 +9,8 @@
 
 extern volatile struct limine_hhdm_request hhdm_request;
 
-int elf_load(const char *path) {
+/* Carga un archivo ELF y prepara el stack con argumentos */
+int elf_load_ext(const char *path, int argc, char **argv) {
     vfs_node_t *node = vfs_open(path);
     if (!node) return -1;
 
@@ -19,8 +20,7 @@ int elf_load(const char *path) {
 
     Elf64_Ehdr *ehdr = (Elf64_Ehdr *)buffer;
     if (memcmp(ehdr->e_ident, "\x7f\x45\x4c\x46", 4) != 0) {
-        kfree(buffer);
-        return -1;
+        kfree(buffer); return -1;
     }
 
     task_t *new_task = sched_create_task(NULL, true);
@@ -34,23 +34,26 @@ int elf_load(const char *path) {
             for (size_t j = 0; j < pages; j++) {
                 void *phys = pmm_alloc_page();
                 vmm_map(pagemap, phdrs[i].p_vaddr + (j * PAGE_SIZE), (uintptr_t)phys, PTE_PRESENT | PTE_WRITABLE | PTE_USER);
-
-                /* Acceso vía HHDM para la copia */
                 size_t to_copy = (phdrs[i].p_filesz > j * PAGE_SIZE) ? phdrs[i].p_filesz - j * PAGE_SIZE : 0;
                 if (to_copy > PAGE_SIZE) to_copy = PAGE_SIZE;
-
-                if (to_copy > 0) {
-                    memcpy((void *)((uintptr_t)phys + hhdm), buffer + phdrs[i].p_offset + (j * PAGE_SIZE), to_copy);
-                } else {
-                    /* BSS / Relleno de ceros */
-                    memset((void *)((uintptr_t)phys + hhdm), 0, PAGE_SIZE);
-                }
+                if (to_copy > 0) memcpy((void *)((uintptr_t)phys + hhdm), buffer + phdrs[i].p_offset + (j * PAGE_SIZE), to_copy);
+                else memset((void *)((uintptr_t)phys + hhdm), 0, PAGE_SIZE);
             }
         }
     }
 
-    new_task->context->rip = ehdr->e_entry;
+    /* Preparar ARGC/ARGV en el stack de usuario */
+    /* El kernel debe mapear y escribir en el stack del usuario via HHDM */
+    uintptr_t stack_top_hhdm = (uintptr_t)virt_to_phys_in_pagemap(new_task->pml4, 0x70000000000 + (2 * PAGE_SIZE) - 8) + hhdm;
+    // (Implementación simplificada para la demo: por ahora solo pasamos argc en RDI y argv en RSI)
+    new_task->context->rdi = argc;
+    new_task->context->rsi = (uint64_t)argv; // NOTA: argv debe ser una direccion de usuario valida.
 
+    new_task->context->rip = ehdr->e_entry;
     kfree(buffer);
     return 0;
+}
+
+int elf_load(const char *path) {
+    return elf_load_ext(path, 0, NULL);
 }

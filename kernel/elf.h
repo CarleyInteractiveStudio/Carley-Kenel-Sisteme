@@ -41,7 +41,7 @@ typedef struct {
 
 #define PT_LOAD 1
 
-/* Carga un archivo ELF del VFS y crea un proceso */
 int elf_load(const char *path);
+int elf_load_ext(const char *path, int argc, char **argv);
 
 #endif

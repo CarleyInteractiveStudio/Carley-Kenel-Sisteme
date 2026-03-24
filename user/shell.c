@@ -2,6 +2,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <time.h>
 
 extern long syscall0(int num);
 extern long syscall1(int num, long arg1);
@@ -32,11 +33,10 @@ void shell_ls(void) {
     }
 }
 
-void shell_mem(void) {
-    uint64_t total = (uint64_t)syscall1(SYS_GET_INFO, 0);
-    uint64_t free = (uint64_t)syscall1(SYS_GET_INFO, 1);
-    printf("Memoria Total: %d MB\n", (int)(total / 1024 / 1024));
-    printf("Memoria Libre: %d MB\n", (int)(free / 1024 / 1024));
+void shell_time(void) {
+    struct tm t;
+    time((time_t *)&t);
+    printf("Fecha: %d/%d/20%d - Hora: %d:%d:%d\n", t.tm_mday, t.tm_mon, t.tm_year, t.tm_hour, t.tm_min, t.tm_sec);
 }
 
 void main(void) {
@@ -62,11 +62,14 @@ void main(void) {
         }
 
         if (strcmp(cmd, "help") == 0) {
-            printf("Comandos: help, ls, cat, gui, mem, casm, crun, exit\n");
+            printf("Comandos: help, ls, cat, gui, mem, time, casm, crun, exit\n");
         } else if (strcmp(cmd, "ls") == 0) {
             shell_ls();
+        } else if (strcmp(cmd, "time") == 0) {
+            shell_time();
         } else if (strcmp(cmd, "mem") == 0) {
-            shell_mem();
+            uint64_t total = (uint64_t)syscall1(SYS_GET_INFO, 0);
+            printf("RAM Total: %d MB\n", (int)(total / 1024 / 1024));
         } else if (strcmp(cmd, "gui") == 0) {
             syscall1(SYS_SPAWN, (long)"gui.elf");
         } else if (strcmp(cmd, "exit") == 0) {

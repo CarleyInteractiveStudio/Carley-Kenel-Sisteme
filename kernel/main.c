@@ -21,6 +21,7 @@
 #include "drivers/composer.h"
 #include "elf.h"
 #include "keyboard_buf.h"
+#include "cpu.h" // Nuevo
 
 extern void mouse_init(void);
 
@@ -35,6 +36,9 @@ static void hlt(void) { for (;;) { __asm__("hlt"); } }
 
 void kmain(void) {
     if (LIMINE_BASE_REVISION_SUPPORTED == false) hlt();
+
+    /* 0. Habilitar funciones extendidas de CPU (FPU/SSE) */
+    cpu_enable_features();
 
     pmm_init();
     vmm_init();
@@ -61,7 +65,7 @@ void kmain(void) {
     video_clear(0x1E1E1E);
 
     mouse_init();
-    composer_start(); // Iniciar servidor gráfico
+    composer_start();
 
     elf_load("shell.elf");
 

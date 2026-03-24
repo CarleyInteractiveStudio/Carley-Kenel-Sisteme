@@ -6,10 +6,10 @@ AS := gcc
 CFLAGS := -Wall -Wextra -std=c11 -ffreestanding -fno-stack-protector -fno-pie -fno-pic -m64 -Ilibc/include -I..
 LDFLAGS := -nostdlib -static
 
-LIBC_OBJ := libc/string.o libc/stdio.o libc/stdlib.o libc/arch/x86_64/crt0.o libc/arch/x86_64/syscall.o
+LIBC_OBJ := libc/string.o libc/stdio.o libc/stdlib.o libc/time.o libc/math.o libc/arch/x86_64/crt0.o libc/arch/x86_64/syscall.o
 LIBC := libc.a
 
-PROGS := hello.elf shell.elf write.elf edit.elf gui.elf casm.elf crun.elf
+PROGS := hello.elf shell.elf write.elf edit.elf gui.elf casm.elf crun.elf calc.elf
 
 .PHONY: all clean
 
