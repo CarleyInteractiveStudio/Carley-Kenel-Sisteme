@@ -15,6 +15,7 @@
 #define SYS_EXIT      8
 #define SYS_SBRK      9
 #define SYS_SPAWN     10
+#define SYS_GET_INFO  11
 
 void syscall_init(void);
 context_t *syscall_handler(context_t *ctx);

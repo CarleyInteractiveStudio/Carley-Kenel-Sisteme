@@ -1,4 +1,5 @@
 #include "include/stdlib.h"
+#include "include/string.h"
 #include <stdint.h>
 
 extern long syscall1(int num, long arg1);
@@ -14,11 +15,7 @@ static block_t *free_list = NULL;
 
 void *malloc(size_t size) {
     if (size == 0) return NULL;
-
-    /* Alinear a 8 bytes */
     size = (size + 7) & ~7;
-
-    /* Buscar en la lista de bloques libres (First Fit) */
     block_t *curr = free_list;
     while (curr) {
         if (curr->free && curr->size >= size) {
@@ -27,19 +24,36 @@ void *malloc(size_t size) {
         }
         curr = curr->next;
     }
-
-    /* Si no hay hueco, pedir más memoria al kernel */
     size_t total_size = size + sizeof(block_t);
     block_t *new_block = (block_t *)syscall1(SYS_SBRK, total_size);
-
     if ((long)new_block == -1) return NULL;
-
     new_block->size = size;
     new_block->free = 0;
     new_block->next = free_list;
     free_list = new_block;
-
     return (void *)(new_block + 1);
+}
+
+void *calloc(size_t nmemb, size_t size) {
+    size_t total = nmemb * size;
+    void *ptr = malloc(total);
+    if (ptr) memset(ptr, 0, total);
+    return ptr;
+}
+
+void *realloc(void *ptr, size_t size) {
+    if (!ptr) return malloc(size);
+    if (size == 0) { free(ptr); return NULL; }
+
+    block_t *block = (block_t *)ptr - 1;
+    if (block->size >= size) return ptr;
+
+    void *new_ptr = malloc(size);
+    if (new_ptr) {
+        memcpy(new_ptr, ptr, block->size);
+        free(ptr);
+    }
+    return new_ptr;
 }
 
 void free(void *ptr) {
@@ -50,6 +64,14 @@ void free(void *ptr) {
 
 void exit(int status) {
     (void)status;
-    /* Llamar a SYS_EXIT (8) */
     __asm__ volatile("mov $8, %%rax; int $0x80" : : : "rax");
+}
+
+int atoi(const char *nptr) {
+    int res = 0;
+    while (*nptr >= '0' && *nptr <= '9') {
+        res = res * 10 + (*nptr - '0');
+        nptr++;
+    }
+    return res;
 }
