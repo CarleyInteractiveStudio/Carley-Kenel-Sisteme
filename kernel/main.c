@@ -18,10 +18,11 @@
 #include "carleyfs.h"
 #include "drivers/ide.h"
 #include "drivers/video.h"
+#include "drivers/audio.h" // Nuevo
 #include "drivers/composer.h"
 #include "elf.h"
 #include "keyboard_buf.h"
-#include "cpu.h" // Nuevo
+#include "cpu.h"
 
 extern void mouse_init(void);
 
@@ -36,10 +37,7 @@ static void hlt(void) { for (;;) { __asm__("hlt"); } }
 
 void kmain(void) {
     if (LIMINE_BASE_REVISION_SUPPORTED == false) hlt();
-
-    /* 0. Habilitar funciones extendidas de CPU (FPU/SSE) */
     cpu_enable_features();
-
     pmm_init();
     vmm_init();
     kheap_init();
@@ -58,6 +56,9 @@ void kmain(void) {
     vfs_mount(carleyfs_init());
     vfs_mount(ramfs_init());
 
+    /* Inicializar Audio */
+    audio_init();
+
     pit_init(100);
     if (framebuffer_request.response == NULL || framebuffer_request.response->framebuffer_count < 1) hlt();
     struct limine_framebuffer *fb = framebuffer_request.response->framebuffers[0];
@@ -66,7 +67,6 @@ void kmain(void) {
 
     mouse_init();
     composer_start();
-
     elf_load("shell.elf");
 
     __asm__ volatile("sti");

@@ -2,12 +2,10 @@
 #include "common/string.h"
 
 static struct limine_framebuffer *framebuffer;
-
-/* Variable para seguir la posición del cursor global del terminal */
 static uint32_t cursor_x = 10;
 static uint32_t cursor_y = 10;
 #define CHAR_WIDTH 8
-#define CHAR_HEIGHT 10 // 8 + 2 de padding
+#define CHAR_HEIGHT 10
 #define MARGIN 10
 
 static const uint8_t font8x8_basic[128][8] = {
@@ -39,99 +37,56 @@ static const uint8_t font8x8_basic[128][8] = {
     ['Z'] = {0x3F, 0x03, 0x06, 0x0C, 0x18, 0x30, 0x3F, 0x00},
     [' '] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
     ['a'] = {0x00, 0x00, 0x1E, 0x03, 0x1F, 0x33, 0x1F, 0x00},
-    ['k'] = {0x30, 0x30, 0x36, 0x3C, 0x38, 0x3C, 0x36, 0x00},
-    ['l'] = {0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x00},
-    ['e'] = {0x00, 0x00, 0x1E, 0x33, 0x3F, 0x30, 0x1E, 0x00},
-    ['r'] = {0x00, 0x00, 0x3E, 0x30, 0x30, 0x30, 0x30, 0x00},
-    ['y'] = {0x00, 0x00, 0x33, 0x33, 0x3F, 0x03, 0x1E, 0x00},
-    ['n'] = {0x00, 0x00, 0x3E, 0x33, 0x33, 0x33, 0x33, 0x00},
-    ['v'] = {0x00, 0x00, 0x33, 0x33, 0x33, 0x1E, 0x0C, 0x00},
     ['0'] = {0x1E, 0x33, 0x3B, 0x3F, 0x37, 0x33, 0x1E, 0x00},
     ['1'] = {0x0C, 0x1C, 0x0C, 0x0C, 0x0C, 0x0C, 0x3F, 0x00},
     ['.'] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x06, 0x06},
-    [':'] = {0x00, 0x0C, 0x0C, 0x00, 0x00, 0x0C, 0x0C, 0x00},
+    ['/'] = {0x00, 0x03, 0x06, 0x0C, 0x18, 0x30, 0x60, 0x00},
     ['>'] = {0x18, 0x0C, 0x06, 0x03, 0x06, 0x0C, 0x18, 0x00},
 };
 
-void video_init(struct limine_framebuffer *fb) {
-    framebuffer = fb;
-}
+void video_init(struct limine_framebuffer *fb) { framebuffer = fb; }
 
 void video_put_pixel(uint32_t x, uint32_t y, uint32_t color) {
     if (x >= framebuffer->width || y >= framebuffer->height) return;
-    uint32_t *fb_ptr = (uint32_t *)framebuffer->address;
-    fb_ptr[y * (framebuffer->pitch / 4) + x] = color;
+    ((uint32_t *)framebuffer->address)[y * (framebuffer->pitch / 4) + x] = color;
 }
 
 void video_draw_rect(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint32_t color) {
-    for (uint32_t i = y; i < y + h; i++) {
-        for (uint32_t j = x; j < x + w; j++) {
+    for (uint32_t i = y; i < y + h; i++)
+        for (uint32_t j = x; j < x + w; j++)
             video_put_pixel(j, i, color);
-        }
-    }
 }
 
 void video_clear(uint32_t color) {
     video_draw_rect(0, 0, framebuffer->width, framebuffer->height, color);
-    cursor_x = MARGIN;
-    cursor_y = MARGIN;
+    cursor_x = MARGIN; cursor_y = MARGIN;
 }
 
-/* Implementación de scroll: mueve todo el framebuffer una línea hacia arriba */
 void video_scroll(void) {
     uint32_t *fb_ptr = (uint32_t *)framebuffer->address;
-    uint32_t pitch_in_uint32 = framebuffer->pitch / 4;
-
-    /* Copiar de la línea 1 a la 0, etc. */
-    for (uint32_t y = MARGIN; y < framebuffer->height - CHAR_HEIGHT - MARGIN; y++) {
-        memcpy(&fb_ptr[y * pitch_in_uint32], &fb_ptr[(y + CHAR_HEIGHT) * pitch_in_uint32], framebuffer->width * 4);
-    }
-
-    /* Limpiar la última línea */
+    uint32_t pitch_w = framebuffer->pitch / 4;
+    for (uint32_t y = MARGIN; y < framebuffer->height - CHAR_HEIGHT - MARGIN; y++)
+        memcpy(&fb_ptr[y * pitch_w], &fb_ptr[(y + CHAR_HEIGHT) * pitch_w], framebuffer->width * 4);
     video_draw_rect(0, framebuffer->height - CHAR_HEIGHT - MARGIN, framebuffer->width, CHAR_HEIGHT, 0x1E1E1E);
     cursor_y -= CHAR_HEIGHT;
 }
 
 void video_draw_char(char c, uint32_t x, uint32_t y, uint32_t color) {
-    int idx = (int)c;
-    if (idx < 0 || idx > 127) return;
-    for (int i = 0; i < 8; i++) {
-        for (int j = 0; j < 8; j++) {
-            if (font8x8_basic[idx][i] & (1 << (7 - j))) {
+    if (c < 0 || c > 127) return;
+    for (int i = 0; i < 8; i++)
+        for (int j = 0; j < 8; j++)
+            if (font8x8_basic[(int)c][i] & (1 << (7 - j)))
                 video_put_pixel(x + j, y + i, color);
-            }
-        }
-    }
 }
 
-/* Función de terminal de alto nivel con soporte de scroll */
 void video_terminal_write(char c, uint32_t color) {
-    if (c == '\n') {
-        cursor_x = MARGIN;
-        cursor_y += CHAR_HEIGHT;
-    } else if (c == '\b') {
-        if (cursor_x > MARGIN) {
-            cursor_x -= CHAR_WIDTH;
-            video_draw_rect(cursor_x, cursor_y, CHAR_WIDTH, CHAR_HEIGHT, 0x1E1E1E);
-        }
-    } else {
-        video_draw_char(c, cursor_x, cursor_y, color);
-        cursor_x += CHAR_WIDTH;
-    }
-
-    if (cursor_x > framebuffer->width - MARGIN) {
-        cursor_x = MARGIN;
-        cursor_y += CHAR_HEIGHT;
-    }
-
-    if (cursor_y > framebuffer->height - CHAR_HEIGHT - MARGIN) {
-        video_scroll();
-    }
+    if (c == '\n') { cursor_x = MARGIN; cursor_y += CHAR_HEIGHT; }
+    else if (c == '\b') { if (cursor_x > MARGIN) { cursor_x -= CHAR_WIDTH; video_draw_rect(cursor_x, cursor_y, CHAR_WIDTH, CHAR_HEIGHT, 0x1E1E1E); } }
+    else { video_draw_char(c, cursor_x, cursor_y, color); cursor_x += CHAR_WIDTH; }
+    if (cursor_x > framebuffer->width - MARGIN) { cursor_x = MARGIN; cursor_y += CHAR_HEIGHT; }
+    if (cursor_y > framebuffer->height - CHAR_HEIGHT - MARGIN) video_scroll();
 }
 
 void video_draw_string(const char *str, uint32_t x, uint32_t y, uint32_t color) {
-    while (*str) {
-        video_draw_char(*str++, x, y, color);
-        x += CHAR_WIDTH;
-    }
+    while (*str) { video_draw_char(*str++, x, y, color); x += CHAR_WIDTH; }
 }

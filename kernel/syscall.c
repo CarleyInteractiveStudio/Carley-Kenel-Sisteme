@@ -3,7 +3,8 @@
 #include "sched.h"
 #include "vfs.h"
 #include "drivers/video.h"
-#include "drivers/rtc.h" // Nuevo
+#include "drivers/rtc.h"
+#include "drivers/audio.h" // Nuevo
 #include "keyboard_buf.h"
 #include "pmm.h"
 #include "vmm.h"
@@ -56,12 +57,14 @@ context_t *syscall_handler(context_t *ctx) {
             else if (ctx->rdi == 1) ctx->rax = pmm_get_free_memory();
             else ctx->rax = 0;
             break;
-        case SYS_TIME: {
-            /* RDI = rtc_time_t* */
-            rtc_get_time((rtc_time_t *)ctx->rdi);
+        case SYS_TIME: rtc_get_time((rtc_time_t *)ctx->rdi); ctx->rax = 0; break;
+
+        case SYS_AUDIO_PLAY:
+            /* RDI = buffer, RSI = size */
+            audio_play((uint8_t *)ctx->rdi, (uint32_t)ctx->rsi);
             ctx->rax = 0;
             break;
-        }
+
         default: ctx->rax = -1; break;
     }
     return ctx;

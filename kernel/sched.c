@@ -39,42 +39,43 @@ task_t *sched_create_task(void (*entry)(void), bool user) {
     }
 
     uint64_t hhdm = hhdm_request.response->offset;
+
+    /* Pila de Kernel (Obligatoria para todas las tareas para guardar contexto) */
     void *kstack_phys = pmm_alloc_pages(2);
     new_task->kernel_stack = (void *)((uintptr_t)kstack_phys + hhdm);
 
     uintptr_t stack_virt;
-    uintptr_t stack_access_ptr;
-
     if (user) {
+        /* Pila de Usuario (Mapeada solo en el PML4 de la tarea) */
         void *ustack_phys = pmm_alloc_pages(2);
         stack_virt = 0x70000000000;
         for(size_t i = 0; i < 2; i++) {
             vmm_map(new_task->pml4, stack_virt + (i * PAGE_SIZE), (uintptr_t)ustack_phys + (i * PAGE_SIZE), PTE_PRESENT | PTE_WRITABLE | PTE_USER);
         }
-        stack_access_ptr = (uintptr_t)ustack_phys + hhdm;
     } else {
+        /* Tareas de kernel: usan su kernel stack como pila principal */
         stack_virt = (uintptr_t)new_task->kernel_stack;
-        stack_access_ptr = stack_virt;
     }
 
     new_task->stack_base = (void *)stack_virt;
 
-    context_t *ctx = (context_t *)(stack_access_ptr + STACK_SIZE - sizeof(context_t));
+    /* SIEMPRE inicializar el contexto en la pila de KERNEL para seguridad */
+    context_t *ctx = (context_t *)((uintptr_t)new_task->kernel_stack + STACK_SIZE - sizeof(context_t));
     memset(ctx, 0, sizeof(context_t));
 
     ctx->rip = (uint64_t)entry;
-    ctx->rsp = (uint64_t)(stack_virt + STACK_SIZE - sizeof(context_t));
+    ctx->rsp = (uint64_t)(stack_virt + STACK_SIZE - 16); // Stack pointer inicial (usuario o kernel)
     ctx->rflags = 0x202;
 
     if (user) {
-        ctx->cs = 0x1B; ctx->ss = 0x23;
+        ctx->cs = 0x1B;
+        ctx->ss = 0x23;
     } else {
-        ctx->cs = 0x08; ctx->ss = 0x10;
+        ctx->cs = 0x08;
+        ctx->ss = 0x10;
     }
 
-    new_task->context = (context_t *)(stack_virt + STACK_SIZE - sizeof(context_t));
-
-    /* Añadir a la lista circular */
+    new_task->context = ctx;
     new_task->next = task_list->next;
     task_list->next = new_task;
 
@@ -83,7 +84,10 @@ task_t *sched_create_task(void (*entry)(void), bool user) {
 
 context_t *sched_schedule(context_t *current_context) {
     if (!current_task) return current_context;
+
+    /* Guardar contexto en el kernel stack de la tarea actual */
     current_task->context = current_context;
+
     if (current_task->state == TASK_RUNNING) current_task->state = TASK_READY;
 
     task_t *next_task = current_task->next;
@@ -96,7 +100,10 @@ context_t *sched_schedule(context_t *current_context) {
 
     current_task = next_task;
     current_task->state = TASK_RUNNING;
+
     vmm_switch_pagemap(current_task->pml4);
+
+    /* Actualizar TSS RSP0 para la siguiente interrupción de usuario */
     tss_set_rsp0((uint64_t)current_task->kernel_stack + STACK_SIZE);
 
     return current_task->context;

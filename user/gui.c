@@ -8,6 +8,7 @@ extern long syscall3(int num, long arg1, long arg2, long arg3);
 #define SYS_IPC_SEND 1
 #define COMPOSER_DRAW_RECT 2
 #define COMPOSER_DRAW_CHAR 3
+#define COMPOSER_DRAW_SPRITE 5
 
 void gui_draw_button(int x, int y, const char *label, uint32_t color) {
     ipc_msg_t msg;
@@ -26,13 +27,25 @@ void gui_draw_button(int x, int y, const char *label, uint32_t color) {
 }
 
 void main(void) {
-    printf("Carley UI v0.1 cargando...\n");
+    printf("Carley Console v0.1 cargando...\n");
 
-    gui_draw_button(50, 50, "HELLO", 0x27AE60);
-    gui_draw_button(150, 50, "EDIT", 0x2980B9);
-    gui_draw_button(250, 50, "EXIT", 0xC0392B);
+    gui_draw_button(50, 50, "PLAY", 0x27AE60);
+    gui_draw_button(150, 50, "STOP", 0xC0392B);
+    gui_draw_button(250, 50, "EXIT", 0x7F8C8D);
 
-    printf("Interfaz grafica iniciada.\n");
+    /* Dibujar un pequeño sprite de demo (una cruz blanca 4x4) */
+    uint32_t cruz[16] = {
+        0xFFFFFF, 0x000000, 0x000000, 0xFFFFFF,
+        0x000000, 0xFFFFFF, 0xFFFFFF, 0x000000,
+        0x000000, 0xFFFFFF, 0xFFFFFF, 0x000000,
+        0xFFFFFF, 0x000000, 0x000000, 0xFFFFFF
+    };
+    ipc_msg_t msg;
+    msg.type = COMPOSER_DRAW_SPRITE;
+    msg.data[0] = 100; msg.data[1] = 100; msg.data[2] = 4; msg.data[3] = 4; msg.data[4] = (uintptr_t)cruz;
+    syscall3(SYS_IPC_SEND, 0, (long)&msg, 0);
+
+    printf("Modo consola activo.\n");
     for (;;) {
         __asm__ volatile("int $0x80" : : "a"(0));
     }

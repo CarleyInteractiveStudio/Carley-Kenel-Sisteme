@@ -45,18 +45,24 @@ isr128:
     jmp isr_common_stub
 
 isr_common_stub:
+    # 1. Guardar todos los registros generales
     push %rax; push %rbx; push %rcx; push %rdx; push %rdi; push %rsi; push %rbp; push %r8
     push %r9; push %r10; push %r11; push %r12; push %r13; push %r14; push %r15
 
+    # 2. Pasar puntero al contexto actual (RSP) como argumento a irq_handler
     mov 15*8(%rsp), %rdi      # int_no
     mov %rsp, %rsi            # context_ptr
 
     call irq_handler
 
+    # 3. Mover RSP al nuevo contexto devuelto por el scheduler
     mov %rax, %rsp
 
+    # 4. Restaurar registros
     pop %r15; pop %r14; pop %r13; pop %r12; pop %r11; pop %r10; pop %r9; pop %r8
     pop %rbp; pop %rsi; pop %rdi; pop %rdx; pop %rcx; pop %rbx; pop %rax
 
+    # 5. Limpiar stack de int_no y error_code
     add $16, %rsp
+
     iretq

@@ -34,19 +34,9 @@ iso: $(KERNEL) userland
 	mkdir -p iso_root/boot
 	cp $(KERNEL) iso_root/boot/
 	cp limine.conf iso_root/boot/
-	cp user/shell.elf iso_root/shell.elf
-	cp user/hello.elf iso_root/hello.elf
-	cp user/write.elf iso_root/write.elf
-	cp user/edit.elf iso_root/edit.elf
-	cp user/gui.elf iso_root/gui.elf
-	cp user/casm.elf iso_root/casm.elf
-	cp user/crun.elf iso_root/crun.elf
+	cp user/*.elf iso_root/
 	dd if=/dev/zero of=carley-disk.img bs=1M count=10
-	# Nota técnica: Para generar una ISO arrancable real se requiere xorriso:
-	# xorriso -as mkisofs -b boot/limine-bios-cd.bin -no-emul-boot -boot-load-size 4 -boot-info-table \
-	# --efi-boot boot/limine-uefi-cd.bin -efi-boot-part --efi-boot-image --protective-msdos-label \
-	# iso_root -o carley-kernel.iso
-	@echo "Estructura ISO y Disco HD listos en iso_root/ y carley-disk.img"
+	@echo "ISO lista con Audio Player."
 
 clean:
 	rm -rf $(OBJ) $(KERNEL) carley-kernel.iso iso_root carley-disk.img
