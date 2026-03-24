@@ -8,6 +8,7 @@
 
 extern volatile struct limine_kernel_address_request kernel_address_request;
 extern volatile struct limine_hhdm_request hhdm_request;
+extern volatile struct limine_memmap_request memmap_request; // Nuevo
 
 static uint64_t *kernel_pml4 = NULL;
 
@@ -40,9 +41,19 @@ void vmm_init(void) {
     kernel_pml4 = phys_to_virt((uintptr_t)pml4_phys);
     memset(kernel_pml4, 0, PAGE_SIZE);
 
+    /* Mapear toda la memoria física reportada por el bootloader en el HHDM */
     uint64_t offset = get_hhdm_offset();
-    for (uintptr_t i = 0; i < 0x100000000; i += PAGE_SIZE) {
-        vmm_map(kernel_pml4, i + offset, i, PTE_PRESENT | PTE_WRITABLE);
+    struct limine_memmap_response *memmap = memmap_request.response;
+    for (uint64_t i = 0; i < memmap->entry_count; i++) {
+        struct limine_memmap_entry *entry = memmap->entries[i];
+
+        /* Alinear base y longitud a página */
+        uintptr_t base = (entry->base / PAGE_SIZE) * PAGE_SIZE;
+        uint64_t length = ((entry->length + PAGE_SIZE - 1) / PAGE_SIZE) * PAGE_SIZE;
+
+        for (uintptr_t j = 0; j < length; j += PAGE_SIZE) {
+            vmm_map(kernel_pml4, base + j + offset, base + j, PTE_PRESENT | PTE_WRITABLE);
+        }
     }
 
     struct limine_kernel_address_response *ka = kernel_address_request.response;
@@ -58,7 +69,6 @@ uint64_t *vmm_create_pagemap(void) {
     uint64_t *pml4 = phys_to_virt((uintptr_t)pml4_phys);
     memset(pml4, 0, PAGE_SIZE);
 
-    /* Copiar la mitad superior (Kernel) del PML4 global */
     for (int i = 256; i < 512; i++) {
         pml4[i] = kernel_pml4[i];
     }

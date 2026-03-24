@@ -15,11 +15,14 @@
 #include "vfs.h"
 #include "initrd.h"
 #include "ramfs.h"
-#include "carleyfs.h" // Nuevo
-#include "drivers/ide.h" // Nuevo
+#include "carleyfs.h"
+#include "drivers/ide.h"
 #include "drivers/video.h"
+#include "drivers/composer.h"
 #include "elf.h"
 #include "keyboard_buf.h"
+
+extern void mouse_init(void);
 
 __attribute__((used, section(".requests"))) volatile LIMINE_BASE_REVISION(2);
 __attribute__((used, section(".requests"))) volatile struct limine_framebuffer_request framebuffer_request = { .id = LIMINE_FRAMEBUFFER_REQUEST, .revision = 0 };
@@ -47,20 +50,18 @@ void kmain(void) {
         initrd_load_all(module_request.response);
     }
 
-    /* Inicializar Drivers de Hardware Real */
     ide_init();
-    vfs_node_t *disk_root = carleyfs_init();
-    vfs_mount(disk_root);
-
-    vfs_node_t *ram_root = ramfs_init();
-    vfs_mount(ram_root);
-    ramfs_create("test.txt", 1024);
+    vfs_mount(carleyfs_init());
+    vfs_mount(ramfs_init());
 
     pit_init(100);
     if (framebuffer_request.response == NULL || framebuffer_request.response->framebuffer_count < 1) hlt();
     struct limine_framebuffer *fb = framebuffer_request.response->framebuffers[0];
     video_init(fb);
     video_clear(0x1E1E1E);
+
+    mouse_init();
+    composer_start(); // Iniciar servidor gráfico
 
     elf_load("shell.elf");
 

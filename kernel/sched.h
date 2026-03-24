@@ -3,6 +3,13 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include "vfs.h"
+
+typedef struct {
+    uint64_t sender;
+    uint64_t type;
+    uint64_t data[5];
+} ipc_msg_t;
 
 typedef struct {
     uint64_t r15, r14, r13, r12, r11, r10, r9, r8;
@@ -15,13 +22,14 @@ typedef enum {
     TASK_RUNNING, TASK_READY, TASK_SLEEPING, TASK_DEAD
 } task_state_t;
 
-/* Estructura para la cola de mensajes IPC */
 struct ipc_msg_node {
     uint64_t sender;
     uint64_t type;
-    uint64_t data[4];
+    uint64_t data[5];
     struct ipc_msg_node *next;
 };
+
+#define MAX_FILES_PER_TASK 32
 
 typedef struct task {
     uint64_t id;
@@ -31,9 +39,10 @@ typedef struct task {
     uint64_t *pml4;
     uintptr_t heap_end;
     task_state_t state;
-
-    /* Cola de mensajes propia del proceso */
     struct ipc_msg_node *msg_queue;
+
+    /* Tabla de descriptores de archivos del proceso */
+    vfs_node_t *files[MAX_FILES_PER_TASK];
 
     struct task *next;
 } task_t;

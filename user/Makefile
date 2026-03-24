@@ -3,7 +3,7 @@ CC := gcc
 AR := ar
 AS := gcc
 
-CFLAGS := -Wall -Wextra -std=c11 -ffreestanding -fno-stack-protector -fno-pie -fno-pic -m64 -Ilibc/include
+CFLAGS := -Wall -Wextra -std=c11 -ffreestanding -fno-stack-protector -fno-pie -fno-pic -m64 -Ilibc/include -I..
 LDFLAGS := -nostdlib -static
 
 LIBC_OBJ := libc/string.o libc/stdio.o libc/stdlib.o libc/arch/x86_64/crt0.o libc/arch/x86_64/syscall.o
@@ -11,7 +11,7 @@ LIBC := libc.a
 
 .PHONY: all clean
 
-all: $(LIBC) hello.elf shell.elf write.elf edit.elf
+all: $(LIBC) hello.elf shell.elf write.elf edit.elf gui.elf
 
 $(LIBC): $(LIBC_OBJ)
 	$(AR) rcs $@ $(LIBC_OBJ)
@@ -28,6 +28,9 @@ write.elf: write.o $(LIBC)
 edit.elf: edit.o $(LIBC)
 	$(CC) $(LDFLAGS) -T linker.ld edit.o $(LIBC) -o $@
 
+gui.elf: gui.o $(LIBC)
+	$(CC) $(LDFLAGS) -T linker.ld gui.o $(LIBC) -o $@
+
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
@@ -35,4 +38,4 @@ edit.elf: edit.o $(LIBC)
 	$(AS) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -f $(LIBC_OBJ) $(LIBC) hello.o hello.elf shell.o shell.elf write.o write.elf edit.o edit.elf
+	rm -f $(LIBC_OBJ) $(LIBC) hello.o hello.elf shell.o shell.elf write.o write.elf edit.o edit.elf gui.o gui.elf

@@ -1,6 +1,7 @@
 #include "kernel/io.h"
 #include "kernel/ipc.h"
-#include "kernel/keyboard_buf.h" // Nuevo include
+#include "kernel/keyboard_buf.h"
+#include "kernel/sched.h" // Para ipc_msg_t
 #include "common/string.h"
 
 static const char scancode_to_ascii[] = {
@@ -24,10 +25,8 @@ void keyboard_handler(void) {
     if (scancode < 0x80) {
         char key = scancode_to_ascii[scancode];
         if (key != 0) {
-            /* Empujar al buffer global de teclado */
             kbd_buf_push(key);
 
-            /* Mantener IPC para compatibilidad con la demo UI */
             ipc_msg_t msg;
             msg.sender = 100;
             msg.type = 0x11;

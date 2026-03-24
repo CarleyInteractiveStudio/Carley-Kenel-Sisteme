@@ -37,9 +37,10 @@ iso: $(KERNEL) userland
 	cp user/shell.elf iso_root/shell.elf
 	cp user/hello.elf iso_root/hello.elf
 	cp user/write.elf iso_root/write.elf
-	# Generar imagen de disco duro vacía (HD) para pruebas de CarleyFS
+	cp user/edit.elf iso_root/edit.elf
+	cp user/gui.elf iso_root/gui.elf
 	dd if=/dev/zero of=carley-disk.img bs=1M count=10
-	@echo "ISO y Disco HD (10MB) listos."
+	@echo "ISO lista con GUI."
 
 clean:
 	rm -rf $(OBJ) $(KERNEL) carley-kernel.iso iso_root carley-disk.img

@@ -11,6 +11,8 @@ extern long syscall3(int num, long arg1, long arg2, long arg3);
 #define SYS_READDIR   7
 #define SYS_EXIT      8
 #define SYS_SPAWN     10
+#define SYS_OPEN      3
+#define SYS_CLOSE     5
 
 typedef struct {
     char name[128];
@@ -21,11 +23,20 @@ typedef struct {
 void shell_ls(void) {
     vfs_dirent_t dirent;
     int index = 0;
+
+    /* Abrir el directorio raiz '/' para obtener su descriptor */
+    int fd = (int)syscall1(SYS_OPEN, (long)"/");
+    if (fd < 0) {
+        printf("Error: No se pudo abrir el directorio raiz.\n");
+        return;
+    }
+
     printf("Contenido de / :\n");
-    while (syscall3(SYS_READDIR, 0, index, (long)&dirent) == 0) {
-        printf("  %s\n", dirent.name);
+    while (syscall3(SYS_READDIR, fd, index, (long)&dirent) == 0) {
+        printf("  %s [%s]\n", dirent.name, (dirent.type == 2 ? "DIR" : "FILE"));
         index++;
     }
+    syscall1(SYS_CLOSE, fd);
 }
 
 void shell_cat(const char *path) {
@@ -35,9 +46,9 @@ void shell_cat(const char *path) {
         return;
     }
     char buf[256];
-    size_t read;
-    while ((read = fread(buf, 1, 255, f)) > 0) {
-        buf[read] = 0;
+    size_t read_bytes;
+    while ((read_bytes = fread(buf, 1, 255, f)) > 0) {
+        buf[read_bytes] = 0;
         printf("%s", buf);
     }
     printf("\n");
@@ -48,8 +59,7 @@ void main(void) {
     char cmd[64];
     int pos = 0;
 
-    printf("\nCarley Shell v0.3\n");
-    printf("Comandos: help, ls, cat [file], clear, exit, [programa]\n");
+    printf("\nCarley Shell v0.3 (Secure Edition)\n");
 
     for (;;) {
         printf("> ");
@@ -77,19 +87,18 @@ void main(void) {
         }
 
         if (strcmp(cmd, "help") == 0) {
-            printf("Comandos: help, ls, cat, clear, exit\n");
+            printf("Comandos: help, ls, cat, gui, exit\n");
         } else if (strcmp(cmd, "ls") == 0) {
             shell_ls();
         } else if (strncmp(cmd, "cat ", 4) == 0) {
             shell_cat(cmd + 4);
-        } else if (strcmp(cmd, "clear") == 0) {
-            /* video_clear no está expuesto vía syscall aún, simulamos */
-            for(int i=0; i<30; i++) putchar('\n');
+        } else if (strcmp(cmd, "gui") == 0) {
+            syscall1(SYS_SPAWN, (long)"gui.elf");
         } else if (strcmp(cmd, "exit") == 0) {
             syscall1(SYS_EXIT, 0);
         } else if (strlen(cmd) > 0) {
             if (syscall1(SYS_SPAWN, (long)cmd) != 0) {
-                printf("Comando no encontrado: %s\n", cmd);
+                printf("Error al lanzar: %s\n", cmd);
             }
         }
     }

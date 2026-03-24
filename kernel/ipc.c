@@ -6,24 +6,20 @@
 
 static spinlock_t ipc_lock = 0;
 
-int ipc_send(uint64_t dest_id, ipc_msg_t *msg) {
+int ipc_send(uint64_t dest_id, void *msg) {
     task_t *dest = (dest_id == 0) ? sched_get_current_task() : sched_get_task_by_id(dest_id);
     if (!dest) return -1;
 
+    ipc_msg_t *m = (ipc_msg_t *)msg;
     spin_lock(&ipc_lock);
-
     struct ipc_msg_node *node = kmalloc(sizeof(struct ipc_msg_node));
-    if (!node) {
-        spin_unlock(&ipc_lock);
-        return -1;
-    }
+    if (!node) { spin_unlock(&ipc_lock); return -1; }
 
-    node->sender = msg->sender;
-    node->type = msg->type;
-    memcpy(node->data, msg->data, sizeof(uint64_t) * 4);
+    node->sender = m->sender;
+    node->type = m->type;
+    memcpy(node->data, m->data, sizeof(uint64_t) * 5);
     node->next = NULL;
 
-    /* Añadir a la cola del proceso destino */
     if (!dest->msg_queue) {
         dest->msg_queue = node;
     } else {
@@ -31,28 +27,22 @@ int ipc_send(uint64_t dest_id, ipc_msg_t *msg) {
         while (curr->next) curr = curr->next;
         curr->next = node;
     }
-
     spin_unlock(&ipc_lock);
     return 0;
 }
 
-int ipc_recv(ipc_msg_t *msg) {
+int ipc_recv(void *msg) {
     task_t *curr_task = sched_get_current_task();
-
+    ipc_msg_t *m = (ipc_msg_t *)msg;
     spin_lock(&ipc_lock);
-    if (!curr_task->msg_queue) {
-        spin_unlock(&ipc_lock);
-        return -1;
-    }
+    if (!curr_task->msg_queue) { spin_unlock(&ipc_lock); return -1; }
 
     struct ipc_msg_node *node = curr_task->msg_queue;
-    msg->sender = node->sender;
-    msg->type = node->type;
-    memcpy(msg->data, node->data, sizeof(uint64_t) * 4);
-
+    m->sender = node->sender;
+    m->type = node->type;
+    memcpy(m->data, node->data, sizeof(uint64_t) * 5);
     curr_task->msg_queue = node->next;
     kfree(node);
-
     spin_unlock(&ipc_lock);
     return 0;
 }
