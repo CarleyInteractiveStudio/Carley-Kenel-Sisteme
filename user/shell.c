@@ -62,9 +62,15 @@ void main(void) {
         }
 
         if (strcmp(cmd, "help") == 0) {
-            printf("Comandos: help, ls, cat, gui, game, mem, time, exit\n");
+            printf("Comandos: help, ls, cat, gui, game, mem, time, mkdir, touch, exit\n");
         } else if (strcmp(cmd, "ls") == 0) {
             shell_ls();
+        } else if (strncmp(cmd, "mkdir ", 6) == 0) {
+            if (mkdir(cmd + 6) == 0) printf("Directorio creado.\n");
+            else printf("Error al crear directorio.\n");
+        } else if (strncmp(cmd, "touch ", 6) == 0) {
+            if (mkfile(cmd + 6, 1024) == 0) printf("Archivo creado (1KB).\n");
+            else printf("Error al crear archivo.\n");
         } else if (strcmp(cmd, "time") == 0) {
             shell_time();
         } else if (strcmp(cmd, "mem") == 0) {

@@ -75,3 +75,15 @@ int atoi(const char *nptr) {
     }
     return res;
 }
+
+extern long syscall2(int num, long arg1, long arg2);
+#define SYS_CREATE 17
+#define SYS_MKDIR 18
+
+int mkdir(const char *path) {
+    return (int)syscall1(SYS_MKDIR, (long)path);
+}
+
+int mkfile(const char *path, uint32_t size) {
+    return (int)syscall2(SYS_CREATE, (long)path, (long)size);
+}

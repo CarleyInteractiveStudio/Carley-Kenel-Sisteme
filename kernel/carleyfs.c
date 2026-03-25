@@ -6,13 +6,26 @@
 #define CARLEYFS_MAX_FILES 64
 
 static carleyfs_inode_t inodes[CARLEYFS_MAX_FILES];
+static carleyfs_superblock_t superblock;
 static bool inodes_loaded = false;
 
-static void cfs_load_inodes(void) {
+static void cfs_load_metadata(void) {
     if (inodes_loaded) return;
+    /* Sector 1: Superbloque */
+    ide_read_sectors(1, 1, (uint8_t *)&superblock);
+    if (superblock.magic != 0xCA121E1) {
+        superblock.magic = 0xCA121E1;
+        superblock.num_inodes = 0;
+        superblock.next_free_sector = 34; // Empieza después de los inodos
+    }
     /* Leer 32 sectores (16KB) que contienen la tabla de inodos (Sectores 2-33) */
     ide_read_sectors(2, 32, (uint8_t *)inodes);
     inodes_loaded = true;
+}
+
+static void cfs_save_metadata(void) {
+    ide_write_sectors(1, 1, (uint8_t *)&superblock);
+    ide_write_sectors(2, 32, (uint8_t *)inodes);
 }
 
 static uint32_t cfs_write(vfs_node_t *node, uint32_t offset, uint32_t size, uint8_t *buffer) {
@@ -63,7 +76,7 @@ static uint32_t cfs_read(vfs_node_t *node, uint32_t offset, uint32_t size, uint8
 
 static int cfs_readdir(vfs_node_t *node, uint32_t index, vfs_dirent_t *dirent) {
     (void)node;
-    cfs_load_inodes();
+    cfs_load_metadata();
 
     uint32_t current = 0;
     for (int i = 0; i < CARLEYFS_MAX_FILES; i++) {
@@ -71,7 +84,7 @@ static int cfs_readdir(vfs_node_t *node, uint32_t index, vfs_dirent_t *dirent) {
             if (current == index) {
                 strcpy(dirent->name, inodes[i].name);
                 dirent->size = inodes[i].size;
-                dirent->type = VFS_FILE;
+                dirent->type = inodes[i].type == 2 ? VFS_DIRECTORY : VFS_FILE;
                 return 0;
             }
             current++;
@@ -82,13 +95,13 @@ static int cfs_readdir(vfs_node_t *node, uint32_t index, vfs_dirent_t *dirent) {
 
 static vfs_node_t *cfs_finddir(vfs_node_t *node, const char *name) {
     (void)node;
-    cfs_load_inodes();
+    cfs_load_metadata();
     for (int i = 0; i < CARLEYFS_MAX_FILES; i++) {
         if (inodes[i].used && strcmp(inodes[i].name, name) == 0) {
             vfs_node_t *fn = kmalloc(sizeof(vfs_node_t));
             strcpy(fn->name, inodes[i].name);
             fn->size = inodes[i].size;
-            fn->type = VFS_FILE;
+            fn->type = inodes[i].type == 2 ? VFS_DIRECTORY : VFS_FILE;
             fn->priv_data = &inodes[i];
             static vfs_ops_t ops = {.read = cfs_read, .write = cfs_write, .finddir = NULL, .readdir = NULL};
             fn->ops = &ops;
@@ -98,11 +111,56 @@ static vfs_node_t *cfs_finddir(vfs_node_t *node, const char *name) {
     return NULL;
 }
 
+static int cfs_create(vfs_node_t *node, const char *name, uint32_t size) {
+    (void)node;
+    cfs_load_metadata();
+
+    for (int i = 0; i < CARLEYFS_MAX_FILES; i++) {
+        if (!inodes[i].used) {
+            strcpy(inodes[i].name, name);
+            inodes[i].size = size;
+            inodes[i].type = 1; // File
+            inodes[i].used = 1;
+            inodes[i].start_sector = superblock.next_free_sector;
+
+            uint32_t sectors = (size + 511) / 512;
+            superblock.next_free_sector += sectors;
+            superblock.num_inodes++;
+
+            cfs_save_metadata();
+            return 0;
+        }
+    }
+    return -1;
+}
+
+static int cfs_mkdir(vfs_node_t *node, const char *name) {
+    (void)node;
+    cfs_load_metadata();
+    for (int i = 0; i < CARLEYFS_MAX_FILES; i++) {
+        if (!inodes[i].used) {
+            strcpy(inodes[i].name, name);
+            inodes[i].size = 0;
+            inodes[i].type = 2; // Directory
+            inodes[i].used = 1;
+            inodes[i].start_sector = 0;
+            superblock.num_inodes++;
+            cfs_save_metadata();
+            return 0;
+        }
+    }
+    return -1;
+}
+
 vfs_node_t *carleyfs_init(void) {
     vfs_node_t *root = kmalloc(sizeof(vfs_node_t));
     strcpy(root->name, "disk");
     root->type = VFS_DIRECTORY;
-    static vfs_ops_t root_ops = {.read = NULL, .write = NULL, .finddir = cfs_finddir, .readdir = cfs_readdir};
+    static vfs_ops_t root_ops = {
+        .read = NULL, .write = NULL,
+        .finddir = cfs_finddir, .readdir = cfs_readdir,
+        .create = cfs_create, .mkdir = cfs_mkdir
+    };
     root->ops = &root_ops;
     return root;
 }

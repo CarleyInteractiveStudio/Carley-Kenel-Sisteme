@@ -58,11 +58,20 @@ int ramfs_create(const char *name, uint32_t size) {
     return 0;
 }
 
+static int ramfs_create_wrapper(vfs_node_t *node, const char *name, uint32_t size) {
+    (void)node;
+    return ramfs_create(name, size);
+}
+
 vfs_node_t *ramfs_init(void) {
     vfs_node_t *root = kmalloc(sizeof(vfs_node_t));
     strcpy(root->name, "ram");
     root->type = VFS_DIRECTORY;
-    static vfs_ops_t root_ops = {.read = NULL, .write = NULL, .finddir = ramfs_finddir, .readdir = ramfs_readdir};
+    static vfs_ops_t root_ops = {
+        .read = NULL, .write = NULL,
+        .finddir = ramfs_finddir, .readdir = ramfs_readdir,
+        .create = ramfs_create_wrapper, .mkdir = NULL
+    };
     root->ops = &root_ops;
     return root;
 }

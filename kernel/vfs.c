@@ -75,11 +75,38 @@ int vfs_readdir(vfs_node_t *node, uint32_t index, vfs_dirent_t *dirent) {
 }
 
 int vfs_create(const char *path, uint32_t size) {
-    // Implementación simplificada: busca el directorio padre y llama a create
-    // En este sistema, asumimos que path es "dir/file"
-    return -1; // Placeholder para implementación completa
+    spin_lock(&vfs_lock);
+    // Para simplificar, buscamos si el path empieza por el nombre de un punto de montaje
+    if (path[0] == '/') path++;
+
+    for (int i = 0; i < mount_count; i++) {
+        size_t mlen = strlen(mount_points[i]->name);
+        if (strncmp(path, mount_points[i]->name, mlen) == 0 && path[mlen] == '/') {
+            if (mount_points[i]->ops->create) {
+                int res = mount_points[i]->ops->create(mount_points[i], path + mlen + 1, size);
+                spin_unlock(&vfs_lock);
+                return res;
+            }
+        }
+    }
+    spin_unlock(&vfs_lock);
+    return -1;
 }
 
 int vfs_mkdir(const char *path) {
-    return -1; // Placeholder
+    spin_lock(&vfs_lock);
+    if (path[0] == '/') path++;
+
+    for (int i = 0; i < mount_count; i++) {
+        size_t mlen = strlen(mount_points[i]->name);
+        if (strncmp(path, mount_points[i]->name, mlen) == 0 && path[mlen] == '/') {
+            if (mount_points[i]->ops->mkdir) {
+                int res = mount_points[i]->ops->mkdir(mount_points[i], path + mlen + 1);
+                spin_unlock(&vfs_lock);
+                return res;
+            }
+        }
+    }
+    spin_unlock(&vfs_lock);
+    return -1;
 }

@@ -82,6 +82,9 @@ context_t *syscall_handler(context_t *ctx) {
             break;
         }
 
+        case SYS_CREATE: ctx->rax = vfs_create((const char *)ctx->rdi, (uint32_t)ctx->rsi); break;
+        case SYS_MKDIR: ctx->rax = vfs_mkdir((const char *)ctx->rdi); break;
+
         default: ctx->rax = -1; break;
     }
     return ctx;
