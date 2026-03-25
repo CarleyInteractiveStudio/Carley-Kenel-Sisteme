@@ -41,7 +41,14 @@ void ap_main(struct limine_smp_info *info) {
     cpu_init_local(info->lapic_id);
     gdt_init();
     idt_init();
-    for (;;) __asm__("hlt");
+
+    // El BSP ya creó una tarea inicial, nosotros creamos una idle para este AP
+    // O simplemente entramos al scheduler con un contexto nulo para empezar.
+    // Usaremos una técnica simple: crear una tarea idle infinita.
+    sched_create_task(hlt, false);
+
+    __asm__ volatile("sti");
+    for (;;) hlt();
 }
 
 void draw_splash(void) {

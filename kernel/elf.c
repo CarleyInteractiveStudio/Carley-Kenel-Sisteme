@@ -9,6 +9,31 @@
 
 extern volatile struct limine_hhdm_request hhdm_request;
 
+static int elf_load_into_pagemap(uint64_t *pagemap, uint8_t *buffer) {
+    Elf64_Ehdr *ehdr = (Elf64_Ehdr *)buffer;
+    Elf64_Phdr *phdrs = (Elf64_Phdr *)(buffer + ehdr->e_phoff);
+    uint64_t hhdm = hhdm_request.response->offset;
+
+    for (int i = 0; i < ehdr->e_phnum; i++) {
+        if (phdrs[i].p_type == PT_LOAD) {
+            size_t pages = (phdrs[i].p_memsz + PAGE_SIZE - 1) / PAGE_SIZE;
+            for (size_t j = 0; j < pages; j++) {
+                uintptr_t vaddr = phdrs[i].p_vaddr + (j * PAGE_SIZE);
+                // Si la página ya está mapeada (por ejemplo, por el intérprete), no la sobreescribimos
+                if (virt_to_phys_in_pagemap(pagemap, vaddr) == 0) {
+                    void *phys = pmm_alloc_page();
+                    vmm_map(pagemap, vaddr, (uintptr_t)phys, PTE_PRESENT | PTE_WRITABLE | PTE_USER);
+                    size_t to_copy = (phdrs[i].p_filesz > j * PAGE_SIZE) ? phdrs[i].p_filesz - j * PAGE_SIZE : 0;
+                    if (to_copy > PAGE_SIZE) to_copy = PAGE_SIZE;
+                    if (to_copy > 0) memcpy((void *)((uintptr_t)phys + hhdm), buffer + phdrs[i].p_offset + (j * PAGE_SIZE), to_copy);
+                    else memset((void *)((uintptr_t)phys + hhdm), 0, PAGE_SIZE);
+                }
+            }
+        }
+    }
+    return 0;
+}
+
 int elf_load_ext(const char *path, int argc, char **argv) {
     vfs_node_t *node = vfs_open(path);
     if (!node) return -1;
@@ -24,31 +49,40 @@ int elf_load_ext(const char *path, int argc, char **argv) {
 
     task_t *new_task = sched_create_task(NULL, true);
     uint64_t *pagemap = new_task->pml4;
-    uint64_t hhdm = hhdm_request.response->offset;
+
+    uint64_t entry_point = ehdr->e_entry;
+    char *interp_path = NULL;
 
     Elf64_Phdr *phdrs = (Elf64_Phdr *)(buffer + ehdr->e_phoff);
     for (int i = 0; i < ehdr->e_phnum; i++) {
-        if (phdrs[i].p_type == PT_LOAD) {
-            size_t pages = (phdrs[i].p_memsz + PAGE_SIZE - 1) / PAGE_SIZE;
-            for (size_t j = 0; j < pages; j++) {
-                void *phys = pmm_alloc_page();
-                vmm_map(pagemap, phdrs[i].p_vaddr + (j * PAGE_SIZE), (uintptr_t)phys, PTE_PRESENT | PTE_WRITABLE | PTE_USER);
-                size_t to_copy = (phdrs[i].p_filesz > j * PAGE_SIZE) ? phdrs[i].p_filesz - j * PAGE_SIZE : 0;
-                if (to_copy > PAGE_SIZE) to_copy = PAGE_SIZE;
-                if (to_copy > 0) memcpy((void *)((uintptr_t)phys + hhdm), buffer + phdrs[i].p_offset + (j * PAGE_SIZE), to_copy);
-                else memset((void *)((uintptr_t)phys + hhdm), 0, PAGE_SIZE);
-            }
-        }
-        /* SOPORTE PARA ENLAZADO DINAMICO (En preparacion) */
         if (phdrs[i].p_type == PT_INTERP) {
-            /* El kernel detecta el interprete solicitado por el binario */
-            /* En el futuro, cargariamos /ld-carley.so aqui */
+            interp_path = (char *)(buffer + phdrs[i].p_offset);
+            break;
         }
+    }
+
+    elf_load_into_pagemap(pagemap, buffer);
+
+    if (interp_path) {
+        /* Cargar el enlazador dinamico */
+        vfs_node_t *interp_node = vfs_open(interp_path);
+        if (interp_node) {
+            uint8_t *interp_buffer = kmalloc(interp_node->size);
+            vfs_read(interp_node, 0, interp_node->size, interp_buffer);
+            Elf64_Ehdr *interp_ehdr = (Elf64_Ehdr *)interp_buffer;
+            elf_load_into_pagemap(pagemap, interp_buffer);
+            entry_point = interp_ehdr->e_entry;
+            kfree(interp_buffer);
+        }
+
+        /* En el futuro, el propio ldso abrirá y mapeará libc.so usando syscalls (mmap, open, read) */
     }
 
     new_task->context->rdi = argc;
     new_task->context->rsi = (uint64_t)argv;
-    new_task->context->rip = ehdr->e_entry;
+    new_task->context->rip = entry_point;
+    // RDX suele pasar la direccion de terminacion o info del loader en algunos ABIs
+    new_task->context->rdx = ehdr->e_entry;
 
     kfree(buffer);
     return 0;

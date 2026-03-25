@@ -4,22 +4,35 @@ AR := ar
 AS := gcc
 
 CFLAGS := -Wall -Wextra -std=c11 -ffreestanding -fno-stack-protector -fPIC -m64 -Ilibc/include -I..
-LDFLAGS := -nostdlib -static
+LDFLAGS_STATIC := -nostdlib -static
+LDFLAGS_DYNAMIC := -nostdlib -shared
 
 LIBC_OBJ := libc/string.o libc/stdio.o libc/stdlib.o libc/time.o libc/math.o libc/arch/x86_64/crt0.o libc/arch/x86_64/syscall.o
-LIBC := libc.a
+LIBC_A := libc.a
+LIBC_SO := libc.so
+LD_SO := ldso.elf
 
-PROGS := hello.elf shell.elf write.elf edit.elf gui.elf casm.elf crun.elf calc.elf play.elf game.elf clock.elf
+PROGS_STATIC := hello.elf shell.elf write.elf edit.elf gui.elf casm.elf crun.elf calc.elf play.elf game.elf clock.elf
+PROGS_DYNAMIC := hello_dyn.elf
 
 .PHONY: all clean
 
-all: $(LIBC) $(PROGS)
+all: $(LIBC_A) $(LIBC_SO) $(LD_SO) $(PROGS_STATIC) $(PROGS_DYNAMIC)
 
-$(LIBC): $(LIBC_OBJ)
+$(LIBC_A): $(LIBC_OBJ)
 	$(AR) rcs $@ $(LIBC_OBJ)
 
-%.elf: %.o $(LIBC)
-	$(CC) $(LDFLAGS) -T linker.ld $< $(LIBC) -o $@
+$(LIBC_SO): $(LIBC_OBJ)
+	$(CC) $(LDFLAGS_DYNAMIC) -T linker.ld $(LIBC_OBJ) -o $@
+
+$(LD_SO): ldso.o ldso_crt0.o $(LIBC_A)
+	$(CC) $(LDFLAGS_STATIC) -T ldso.ld ldso_crt0.o ldso.o $(LIBC_A) -o $@
+
+%.elf: %.o $(LIBC_A)
+	$(CC) $(LDFLAGS_STATIC) -T linker.ld $< $(LIBC_A) -o $@
+
+hello_dyn.elf: hello.o $(LIBC_SO)
+	$(CC) -nostdlib -T linker.ld hello.o $(LIBC_SO) -Wl,--dynamic-linker=/ldso.elf -o $@
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@

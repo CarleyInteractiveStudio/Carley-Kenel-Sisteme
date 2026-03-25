@@ -39,6 +39,7 @@ typedef struct task {
     uint64_t *pml4;
     uintptr_t heap_end;
     task_state_t state;
+    int cpu_id; // -1 if not running, otherwise CPU ID
     struct ipc_msg_node *msg_queue;
 
     /* Tabla de descriptores de archivos del proceso */

@@ -5,6 +5,7 @@
 
 extern long syscall1(int num, long arg1);
 extern long syscall3(int num, long arg1, long arg2, long arg3);
+extern long syscall4(int num, long arg1, long arg2, long arg3, long arg4);
 
 #define SYS_OPEN  3
 #define SYS_READ  4
@@ -12,13 +13,13 @@ extern long syscall3(int num, long arg1, long arg2, long arg3);
 
 int putchar(int c) {
     char buf = (char)c;
-    syscall3(SYS_WRITE, 1, (long)&buf, 1);
+    syscall4(SYS_WRITE, 1, 0, 1, (long)&buf);
     return c;
 }
 
 int puts(const char *s) {
     size_t len = strlen(s);
-    syscall3(SYS_WRITE, 1, (long)s, len);
+    syscall4(SYS_WRITE, 1, 0, len, (long)s);
     putchar('\n');
     return 0;
 }
@@ -67,7 +68,7 @@ int printf(const char *format, ...) {
                     break;
                 case 'p':
                     putchar('0'); putchar('x');
-                    print_uint(va_arg(args, uint64_t), 16);
+                    print_uint((uint64_t)va_arg(args, void *), 16);
                     break;
                 case 'c':
                     putchar(va_arg(args, int));
@@ -107,16 +108,26 @@ FILE *fopen(const char *path, const char *mode) {
 
 size_t fread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
     if (!stream) return 0;
-    long ret = syscall3(SYS_READ, (long)stream->vfs_node, (long)ptr, size * nmemb);
+    long ret = syscall4(SYS_READ, (long)stream->vfs_node, stream->pos, size * nmemb, (long)ptr);
     if (ret < 0) { stream->error = 1; return 0; }
+    stream->pos += ret;
     return (size_t)ret / size;
 }
 
 size_t fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream) {
     if (!stream) return 0;
-    long ret = syscall3(SYS_WRITE, (long)stream->vfs_node, (long)ptr, size * nmemb);
+    long ret = syscall4(SYS_WRITE, (long)stream->vfs_node, stream->pos, size * nmemb, (long)ptr);
     if (ret < 0) { stream->error = 1; return 0; }
+    stream->pos += ret;
     return (size_t)ret / size;
+}
+
+int fseek(FILE *stream, long offset, int whence) {
+    if (!stream) return -1;
+    if (whence == SEEK_SET) stream->pos = offset;
+    else if (whence == SEEK_CUR) stream->pos += offset;
+    // SEEK_END no implementado sin vfs_stat o similar
+    return 0;
 }
 
 int fclose(FILE *stream) {

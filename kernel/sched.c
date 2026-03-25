@@ -27,6 +27,7 @@ void sched_init(void) {
     memset(kernel_idle, 0, sizeof(task_t));
     kernel_idle->id = 0;
     kernel_idle->state = TASK_RUNNING;
+    kernel_idle->cpu_id = 0;
     kernel_idle->pml4 = vmm_get_kernel_pagemap();
     kernel_idle->next = kernel_idle;
     task_list = kernel_idle;
@@ -40,6 +41,7 @@ task_t *sched_create_task(void (*entry)(void), bool user) {
     memset(new_task, 0, sizeof(task_t));
     new_task->id = next_id++;
     new_task->state = TASK_READY;
+    new_task->cpu_id = -1;
 
     if (user) {
         new_task->pml4 = vmm_create_pagemap();
@@ -85,22 +87,37 @@ task_t *sched_create_task(void (*entry)(void), bool user) {
 context_t *sched_schedule(context_t *current_context) {
     cpu_local_t *local = cpu_get_local();
     task_t *curr = (task_t *)local->current_task;
+    uint64_t my_cpu = local->cpu_id;
 
     spin_lock(&sched_lock);
     curr->context = current_context;
-    if (curr->state == TASK_RUNNING) curr->state = TASK_READY;
+    if (curr->state == TASK_RUNNING) {
+        curr->state = TASK_READY;
+        curr->cpu_id = -1;
+    }
 
     task_t *next_task = curr->next;
-    while (next_task->state != TASK_READY && next_task->state != TASK_RUNNING) {
+    while (true) {
+        if (next_task->state == TASK_READY && next_task->cpu_id == -1) {
+            break;
+        }
         next_task = next_task->next;
-        if (next_task == curr && curr->state == TASK_DEAD) {
-            spin_unlock(&sched_lock);
-            for (;;) __asm__("hlt");
+        if (next_task == curr) {
+            // No hay tareas READY libres. Si la actual sigue viva, la retomamos.
+            if (curr->state != TASK_DEAD) {
+                next_task = curr;
+                break;
+            } else {
+                // El CPU debe quedar IDLE (en un sistema real usaríamos una tarea idle por CPU)
+                spin_unlock(&sched_lock);
+                for (;;) __asm__("hlt");
+            }
         }
     }
 
     local->current_task = next_task;
     next_task->state = TASK_RUNNING;
+    next_task->cpu_id = my_cpu;
     vmm_switch_pagemap(next_task->pml4);
     tss_set_rsp0((uint64_t)next_task->kernel_stack + STACK_SIZE);
     spin_unlock(&sched_lock);
