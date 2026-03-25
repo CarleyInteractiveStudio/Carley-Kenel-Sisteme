@@ -50,6 +50,12 @@ int elf_load_ext(const char *path, int argc, char **argv) {
     task_t *new_task = sched_create_task(NULL, true);
     uint64_t *pagemap = new_task->pml4;
 
+    /* Asignar capacidades por defecto basadas en el nombre */
+    if (strcmp(path, "shell.elf") == 0) new_task->capabilities = 0xFFFFFFFF; // Shell tiene todo
+    else if (strcmp(path, "input.elf") == 0) new_task->capabilities = CAP_HARDWARE;
+    else if (strcmp(path, "dashboard.elf") == 0) new_task->capabilities = CAP_DISK;
+    else new_task->capabilities = CAP_NONE;
+
     uint64_t entry_point = ehdr->e_entry;
     char *interp_path = NULL;
 

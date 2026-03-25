@@ -62,12 +62,12 @@ void kmain(void) {
     if (LIMINE_BASE_REVISION_SUPPORTED == false) hlt();
     cpu_enable_features();
 
-    /* Inicializar el núcleo actual (BSP) */
-    cpu_init_local(0);
-
     pmm_init();
     vmm_init();
     kheap_init();
+
+    /* Inicializar el núcleo actual (BSP) después del heap */
+    cpu_init_local(0);
     gdt_init();
     idt_init();
     kbd_buf_init();

@@ -19,6 +19,7 @@ void cpu_enable_features(void) {
 
 void cpu_init_local(uint64_t id) {
     cpu_local_t *local = kmalloc(sizeof(cpu_local_t));
+    local->self = local;
     local->cpu_id = id;
     local->current_task = NULL;
 

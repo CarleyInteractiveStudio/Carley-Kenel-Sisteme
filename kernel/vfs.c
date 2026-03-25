@@ -37,7 +37,7 @@ vfs_node_t *vfs_open(const char *path) {
 
     char first_part[128];
     int i = 0;
-    while (path[i] && path[i] != '/') {
+    while (path[i] && path[i] != '/' && i < 127) {
         first_part[i] = path[i];
         i++;
     }

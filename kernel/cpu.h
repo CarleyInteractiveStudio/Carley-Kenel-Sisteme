@@ -5,7 +5,8 @@
 
 #include "gdt.h"
 
-typedef struct {
+typedef struct cpu_local {
+    struct cpu_local *self; // Self-pointer for GS:0 access
     uint64_t cpu_id;
     void *current_task;
     gdt_entry_t gdt[7];

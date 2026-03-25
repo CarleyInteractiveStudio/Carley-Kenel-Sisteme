@@ -4,8 +4,8 @@
 Carley Kernel es un microkernel diseñado desde cero para x86_64, enfocado en seguridad extrema, modularidad y su uso en PCs y consolas de videojuegos.
 
 ## Principios de Diseño
-- **Microkernel:** El sistema está en transición hacia un diseño de microkernel puro. Actualmente, los servicios esenciales residen en el kernel pero se comunican vía IPC.
-- **Seguridad:** Aislamiento total Ring 3 con handles, pilas de kernel privadas por tarea y protección de memoria por proceso.
+- **Microkernel:** Carley OS sigue un diseño de microkernel. El Input Server (teclado) ya corre en espacio de usuario, y otros drivers seguirán.
+- **Seguridad:** Sistema de **Capacidades (Capabilities)** que restringe el acceso a syscalls críticas (Disk, Hardware) por proceso. Aislamiento total Ring 3.
 - **Modernidad:** Soporte para Multi-núcleo (SMP) y Enlazado Dinámico (Skeleton .so preparado).
 
 ## Componentes del Kernel

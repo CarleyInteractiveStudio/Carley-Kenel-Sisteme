@@ -46,6 +46,13 @@ char *strcpy(char *dest, const char *src) {
     return dest;
 }
 
+char *strncpy(char *dest, const char *src, size_t n) {
+    char *d = dest;
+    while (n && (*d++ = *src++)) n--;
+    while (n--) *d++ = 0;
+    return dest;
+}
+
 size_t strlen(const char *s) {
     size_t len = 0;
     while (*s++) len++;

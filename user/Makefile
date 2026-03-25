@@ -1,19 +1,21 @@
 # Configuración para el Espacio de Usuario
 CC := gcc
+CXX := g++
 AR := ar
 AS := gcc
 
 CFLAGS := -Wall -Wextra -std=c11 -ffreestanding -fno-stack-protector -fPIC -m64 -Ilibc/include -I..
+CXXFLAGS := -Wall -Wextra -std=c++11 -ffreestanding -fno-stack-protector -fno-exceptions -fno-rtti -fPIC -m64 -Ilibc/include -I..
 LDFLAGS_STATIC := -nostdlib -static
 LDFLAGS_DYNAMIC := -nostdlib -shared
 
-LIBC_OBJ := libc/string.o libc/stdio.o libc/stdlib.o libc/time.o libc/math.o libc/arch/x86_64/crt0.o libc/arch/x86_64/syscall.o
+LIBC_OBJ := libc/string.o libc/stdio.o libc/stdlib.o libc/time.o libc/math.o libc/arch/x86_64/crt0.o libc/arch/x86_64/syscall.o libc/cpp_runtime.o
 LIBC_A := libc.a
 LIBC_SO := libc.so
 LD_SO := ldso.elf
 
 PROGS_STATIC := hello.elf shell.elf write.elf edit.elf gui.elf casm.elf crun.elf calc.elf play.elf game.elf clock.elf input.elf
-PROGS_DYNAMIC := hello_dyn.elf
+PROGS_DYNAMIC := hello_dyn.elf dashboard.elf
 
 .PHONY: all clean
 
@@ -36,6 +38,9 @@ hello_dyn.elf: hello.o $(LIBC_SO)
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
+
+%.o: %.cpp
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 %.o: %.s
 	$(AS) $(CFLAGS) -c $< -o $@

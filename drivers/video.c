@@ -1,5 +1,6 @@
 #include "video.h"
 #include "common/string.h"
+#include <stdbool.h>
 
 static struct limine_framebuffer *framebuffer;
 static uint32_t cursor_x = 10;
@@ -51,10 +52,32 @@ void video_put_pixel(uint32_t x, uint32_t y, uint32_t color) {
     ((uint32_t *)framebuffer->address)[y * (framebuffer->pitch / 4) + x] = color;
 }
 
+void video_put_pixel_alpha(uint32_t x, uint32_t y, uint32_t color) {
+    if (x >= framebuffer->width || y >= framebuffer->height) return;
+
+    uint8_t alpha = (color >> 24) & 0xFF;
+    if (alpha == 255) {
+        video_put_pixel(x, y, color);
+        return;
+    }
+    if (alpha == 0) return;
+
+    uint32_t bg = ((uint32_t *)framebuffer->address)[y * (framebuffer->pitch / 4) + x];
+
+    uint32_t rb = ((color & 0xFF00FF) * alpha + (bg & 0xFF00FF) * (255 - alpha)) / 255;
+    uint32_t g  = ((color & 0x00FF00) * alpha + (bg & 0x00FF00) * (255 - alpha)) / 255;
+
+    ((uint32_t *)framebuffer->address)[y * (framebuffer->pitch / 4) + x] = (rb & 0xFF00FF) | (g & 0x00FF00);
+}
+
 void video_draw_rect(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint32_t color) {
-    for (uint32_t i = y; i < y + h; i++)
-        for (uint32_t j = x; j < x + w; j++)
-            video_put_pixel(j, i, color);
+    bool has_alpha = ((color >> 24) & 0xFF) < 255;
+    for (uint32_t i = y; i < y + h; i++) {
+        for (uint32_t j = x; j < x + w; j++) {
+            if (has_alpha) video_put_pixel_alpha(j, i, color);
+            else video_put_pixel(j, i, color);
+        }
+    }
 }
 
 void video_clear(uint32_t color) {

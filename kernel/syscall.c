@@ -73,8 +73,10 @@ context_t *syscall_handler(context_t *ctx) {
         }
 
         case SYS_IOPL: {
-            /* RDI = level (0-3). Cambia el flag IOPL en RFLAGS para permitir in/out en Ring 3 */
-            /* Esto es vital para drivers en espacio de usuario */
+            /* Solo permitir si tiene capacidad de HARDWARE */
+            if (!(sched_get_current_task()->capabilities & CAP_HARDWARE)) {
+                ctx->rax = -1; break;
+            }
             uint64_t level = ctx->rdi & 3;
             ctx->rflags &= ~(3ULL << 12); // Limpiar bits 12-13
             ctx->rflags |= (level << 12);
@@ -82,8 +84,12 @@ context_t *syscall_handler(context_t *ctx) {
             break;
         }
 
-        case SYS_CREATE: ctx->rax = vfs_create((const char *)ctx->rdi, (uint32_t)ctx->rsi); break;
-        case SYS_MKDIR: ctx->rax = vfs_mkdir((const char *)ctx->rdi); break;
+        case SYS_CREATE:
+            if (!(sched_get_current_task()->capabilities & CAP_DISK)) { ctx->rax = -1; break; }
+            ctx->rax = vfs_create((const char *)ctx->rdi, (uint32_t)ctx->rsi); break;
+        case SYS_MKDIR:
+            if (!(sched_get_current_task()->capabilities & CAP_DISK)) { ctx->rax = -1; break; }
+            ctx->rax = vfs_mkdir((const char *)ctx->rdi); break;
 
         default: ctx->rax = -1; break;
     }

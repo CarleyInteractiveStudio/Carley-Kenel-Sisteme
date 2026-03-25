@@ -31,6 +31,14 @@ struct ipc_msg_node {
 
 #define MAX_FILES_PER_TASK 32
 
+typedef enum {
+    CAP_NONE = 0,
+    CAP_DISK = (1 << 0),
+    CAP_NETWORK = (1 << 1),
+    CAP_HARDWARE = (1 << 2),
+    CAP_SYS_ADMIN = (1 << 3)
+} capability_t;
+
 typedef struct task {
     uint64_t id;
     context_t *context;
@@ -44,6 +52,7 @@ typedef struct task {
 
     /* Tabla de descriptores de archivos del proceso */
     vfs_node_t *files[MAX_FILES_PER_TASK];
+    uint32_t capabilities;
 
     struct task *next;
 } task_t;

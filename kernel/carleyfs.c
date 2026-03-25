@@ -117,7 +117,8 @@ static int cfs_create(vfs_node_t *node, const char *name, uint32_t size) {
 
     for (int i = 0; i < CARLEYFS_MAX_FILES; i++) {
         if (!inodes[i].used) {
-            strcpy(inodes[i].name, name);
+            strncpy(inodes[i].name, name, 63);
+            inodes[i].name[63] = 0;
             inodes[i].size = size;
             inodes[i].type = 1; // File
             inodes[i].used = 1;
@@ -139,7 +140,8 @@ static int cfs_mkdir(vfs_node_t *node, const char *name) {
     cfs_load_metadata();
     for (int i = 0; i < CARLEYFS_MAX_FILES; i++) {
         if (!inodes[i].used) {
-            strcpy(inodes[i].name, name);
+            strncpy(inodes[i].name, name, 63);
+            inodes[i].name[63] = 0;
             inodes[i].size = 0;
             inodes[i].type = 2; // Directory
             inodes[i].used = 1;
