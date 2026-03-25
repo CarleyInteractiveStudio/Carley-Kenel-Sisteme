@@ -9,7 +9,6 @@
 
 extern volatile struct limine_hhdm_request hhdm_request;
 
-/* Carga un archivo ELF y prepara el stack con argumentos */
 int elf_load_ext(const char *path, int argc, char **argv) {
     vfs_node_t *node = vfs_open(path);
     if (!node) return -1;
@@ -40,16 +39,17 @@ int elf_load_ext(const char *path, int argc, char **argv) {
                 else memset((void *)((uintptr_t)phys + hhdm), 0, PAGE_SIZE);
             }
         }
+        /* SOPORTE PARA ENLAZADO DINAMICO (En preparacion) */
+        if (phdrs[i].p_type == PT_INTERP) {
+            /* El kernel detecta el interprete solicitado por el binario */
+            /* En el futuro, cargariamos /ld-carley.so aqui */
+        }
     }
 
-    /* Preparar ARGC/ARGV en el stack de usuario */
-    /* El kernel debe mapear y escribir en el stack del usuario via HHDM */
-    uintptr_t stack_top_hhdm = (uintptr_t)virt_to_phys_in_pagemap(new_task->pml4, 0x70000000000 + (2 * PAGE_SIZE) - 8) + hhdm;
-    // (Implementación simplificada para la demo: por ahora solo pasamos argc en RDI y argv en RSI)
     new_task->context->rdi = argc;
-    new_task->context->rsi = (uint64_t)argv; // NOTA: argv debe ser una direccion de usuario valida.
-
+    new_task->context->rsi = (uint64_t)argv;
     new_task->context->rip = ehdr->e_entry;
+
     kfree(buffer);
     return 0;
 }

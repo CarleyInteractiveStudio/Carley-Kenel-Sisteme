@@ -35,8 +35,9 @@ iso: $(KERNEL) userland
 	cp $(KERNEL) iso_root/boot/
 	cp limine.conf iso_root/boot/
 	cp user/*.elf iso_root/
+	cp user/*.so iso_root/
 	dd if=/dev/zero of=carley-disk.img bs=1M count=10
-	@echo "ISO lista con Audio Player."
+	@echo "ISO lista con Librerias Dinamicas (.so)."
 
 clean:
 	rm -rf $(OBJ) $(KERNEL) carley-kernel.iso iso_root carley-disk.img

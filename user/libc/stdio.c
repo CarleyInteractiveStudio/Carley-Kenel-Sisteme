@@ -23,16 +23,67 @@ int puts(const char *s) {
     return 0;
 }
 
+static void print_uint(uint64_t n, int base) {
+    char buf[32];
+    int i = 0;
+    const char *digits = "0123456789ABCDEF";
+    if (n == 0) { putchar('0'); return; }
+    while (n > 0) {
+        buf[i++] = digits[n % base];
+        n /= base;
+    }
+    while (--i >= 0) putchar(buf[i]);
+}
+
+static void print_int(int64_t n) {
+    if (n < 0) { putchar('-'); n = -n; }
+    print_uint((uint64_t)n, 10);
+}
+
 int printf(const char *format, ...) {
     va_list args;
     va_start(args, format);
     int count = 0;
     while (*format) {
-        if (*format == '%' && *(format + 1) == 's') {
-            const char *s = va_arg(args, const char *);
-            size_t len = strlen(s);
-            syscall3(SYS_WRITE, 1, (long)s, len);
-            format += 2;
+        if (*format == '%') {
+            format++;
+            switch (*format) {
+                case 's': {
+                    const char *s = va_arg(args, const char *);
+                    if (!s) s = "(null)";
+                    while (*s) { putchar(*s++); count++; }
+                    break;
+                }
+                case 'd':
+                case 'i':
+                    print_int(va_arg(args, int));
+                    break;
+                case 'u':
+                    print_uint(va_arg(args, unsigned int), 10);
+                    break;
+                case 'x':
+                case 'X':
+                    print_uint(va_arg(args, unsigned int), 16);
+                    break;
+                case 'p':
+                    putchar('0'); putchar('x');
+                    print_uint(va_arg(args, uint64_t), 16);
+                    break;
+                case 'c':
+                    putchar(va_arg(args, int));
+                    count++;
+                    break;
+                case '%':
+                    putchar('%');
+                    count++;
+                    break;
+                default:
+                    putchar('%');
+                    putchar(*format);
+                    count += 2;
+                    break;
+            }
+            format++;
         } else {
             putchar(*format++);
             count++;

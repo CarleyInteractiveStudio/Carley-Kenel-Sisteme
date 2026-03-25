@@ -5,12 +5,14 @@
 #include "common/string.h"
 #include "vmm.h"
 #include "pmm.h"
+#include "spinlock.h"
 
 extern volatile struct limine_kernel_address_request kernel_address_request;
 extern volatile struct limine_hhdm_request hhdm_request;
 extern volatile struct limine_memmap_request memmap_request;
 
 static uint64_t *kernel_pml4 = NULL;
+static spinlock_t vmm_lock = 0;
 
 static inline uint64_t get_hhdm_offset(void) {
     return hhdm_request.response->offset;
@@ -85,6 +87,7 @@ uint64_t *vmm_create_pagemap(void) {
 }
 
 void vmm_map(uint64_t *pml4, uintptr_t virt, uintptr_t phys, uint64_t flags) {
+    spin_lock(&vmm_lock);
     uint64_t pml4_idx = (virt >> 39) & 0x1FF;
     uint64_t pdpt_idx = (virt >> 30) & 0x1FF;
     uint64_t pd_idx = (virt >> 21) & 0x1FF;
@@ -93,21 +96,24 @@ void vmm_map(uint64_t *pml4, uintptr_t virt, uintptr_t phys, uint64_t flags) {
     uint64_t *pd = get_next_table(pdpt, pdpt_idx, true);
     uint64_t *pt = get_next_table(pd, pd_idx, true);
     pt[pt_idx] = phys | flags;
+    spin_unlock(&vmm_lock);
 }
 
 void vmm_unmap(uint64_t *pml4, uintptr_t virt) {
+    spin_lock(&vmm_lock);
     uint64_t pml4_idx = (virt >> 39) & 0x1FF;
     uint64_t pdpt_idx = (virt >> 30) & 0x1FF;
     uint64_t pd_idx = (virt >> 21) & 0x1FF;
     uint64_t pt_idx = (virt >> 12) & 0x1FF;
     uint64_t *pdpt = get_next_table(pml4, pml4_idx, false);
-    if (!pdpt) return;
+    if (!pdpt) { spin_unlock(&vmm_lock); return; }
     uint64_t *pd = get_next_table(pdpt, pdpt_idx, false);
-    if (!pd) return;
+    if (!pd) { spin_unlock(&vmm_lock); return; }
     uint64_t *pt = get_next_table(pd, pd_idx, false);
-    if (!pt) return;
+    if (!pt) { spin_unlock(&vmm_lock); return; }
     pt[pt_idx] = 0;
     __asm__ volatile("invlpg (%0)" : : "r"(virt) : "memory");
+    spin_unlock(&vmm_lock);
 }
 
 void vmm_switch_pagemap(uint64_t *pml4) {

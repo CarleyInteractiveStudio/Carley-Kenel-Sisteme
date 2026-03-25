@@ -3,7 +3,12 @@
 *.elf
 *.bin
 *.iso
+*.img
 iso_root/
+
+# Librerias compartidas y estaticas
+*.so
+*.a
 
 # Archivos de depuración y logs
 *.log

@@ -6,25 +6,20 @@
 #include "common/string.h"
 #include "common/limine.h"
 #include "spinlock.h"
+#include "cpu.h"
 
 #define STACK_SIZE (PAGE_SIZE * 2)
 #define DEFAULT_USER_HEAP_START 0x80000000000
 
 extern volatile struct limine_hhdm_request hhdm_request;
+extern volatile struct limine_smp_request smp_request;
 
-/* Multi-core: Un puntero por CPU para saber qué corre en cada una */
-static task_t *current_tasks[256];
 static task_t *task_list = NULL;
 static uint64_t next_id = 1;
 static spinlock_t sched_lock = 0;
 
-/* Ayudante para obtener ID de CPU actual vía Limine */
-extern volatile struct limine_smp_request smp_request;
-static uint64_t get_cpu_id(void) {
-    if (!smp_request.response) return 0;
-    /* En x86_64 real usaríamos GS base o local APIC ID */
-    /* Para esta demo, simulamos BSP=0 */
-    return 0;
+uint64_t get_cpu_id(void) {
+    return cpu_get_local()->cpu_id;
 }
 
 void sched_init(void) {
@@ -36,7 +31,7 @@ void sched_init(void) {
     kernel_idle->next = kernel_idle;
     task_list = kernel_idle;
 
-    for(int i=0; i<256; i++) current_tasks[i] = kernel_idle;
+    cpu_get_local()->current_task = kernel_idle;
 }
 
 task_t *sched_create_task(void (*entry)(void), bool user) {
@@ -59,7 +54,6 @@ task_t *sched_create_task(void (*entry)(void), bool user) {
 
     uintptr_t stack_virt;
     uintptr_t stack_access_ptr;
-
     if (user) {
         void *ustack_phys = pmm_alloc_pages(2);
         stack_virt = 0x70000000000;
@@ -84,45 +78,38 @@ task_t *sched_create_task(void (*entry)(void), bool user) {
     new_task->context = ctx;
     new_task->next = task_list->next;
     task_list->next = new_task;
-
     spin_unlock(&sched_lock);
     return new_task;
 }
 
 context_t *sched_schedule(context_t *current_context) {
-    uint64_t cpu = get_cpu_id();
+    cpu_local_t *local = cpu_get_local();
+    task_t *curr = (task_t *)local->current_task;
 
     spin_lock(&sched_lock);
-    if (!current_tasks[cpu]) { spin_unlock(&sched_lock); return current_context; }
+    curr->context = current_context;
+    if (curr->state == TASK_RUNNING) curr->state = TASK_READY;
 
-    current_tasks[cpu]->context = current_context;
-    if (current_tasks[cpu]->state == TASK_RUNNING) current_tasks[cpu]->state = TASK_READY;
-
-    task_t *next_task = current_tasks[cpu]->next;
+    task_t *next_task = curr->next;
     while (next_task->state != TASK_READY && next_task->state != TASK_RUNNING) {
         next_task = next_task->next;
-        if (next_task == current_tasks[cpu] && current_tasks[cpu]->state == TASK_DEAD) {
+        if (next_task == curr && curr->state == TASK_DEAD) {
             spin_unlock(&sched_lock);
             for (;;) __asm__("hlt");
         }
     }
 
-    current_tasks[cpu] = next_task;
-    current_tasks[cpu]->state = TASK_RUNNING;
-
-    vmm_switch_pagemap(current_tasks[cpu]->pml4);
-    tss_set_rsp0((uint64_t)current_tasks[cpu]->kernel_stack + STACK_SIZE);
-
+    local->current_task = next_task;
+    next_task->state = TASK_RUNNING;
+    vmm_switch_pagemap(next_task->pml4);
+    tss_set_rsp0((uint64_t)next_task->kernel_stack + STACK_SIZE);
     spin_unlock(&sched_lock);
-    return current_tasks[cpu]->context;
+    return next_task->context;
 }
 
 void sched_yield(void) { __asm__ volatile("int $32"); }
-void sched_terminate_task(void) {
-    uint64_t cpu = get_cpu_id();
-    if (current_tasks[cpu]) current_tasks[cpu]->state = TASK_DEAD;
-}
-task_t *sched_get_current_task(void) { return current_tasks[get_cpu_id()]; }
+void sched_terminate_task(void) { sched_get_current_task()->state = TASK_DEAD; }
+task_t *sched_get_current_task(void) { return (task_t *)cpu_get_local()->current_task; }
 
 task_t *sched_get_task_by_id(uint64_t id) {
     task_t *curr = task_list;

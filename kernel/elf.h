@@ -39,7 +39,9 @@ typedef struct {
     Elf64_Xword   p_align;
 } Elf64_Phdr;
 
-#define PT_LOAD 1
+#define PT_LOAD    1
+#define PT_DYNAMIC 2
+#define PT_INTERP  3
 
 int elf_load(const char *path);
 int elf_load_ext(const char *path, int argc, char **argv);

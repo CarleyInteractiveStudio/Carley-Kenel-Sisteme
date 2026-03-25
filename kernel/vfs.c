@@ -24,10 +24,12 @@ uint32_t vfs_write(vfs_node_t *node, uint32_t offset, uint32_t size, uint8_t *bu
 
 vfs_node_t *vfs_open(const char *path) {
     if (!vfs_root || !path) return NULL;
-    if (path[0] == '/') path++;
-    if (strlen(path) == 0) return vfs_root;
 
-    /* Extraer la primera parte del path (punto de montaje o archivo en root) */
+    /* Si es la raiz */
+    if (strcmp(path, "/") == 0) return vfs_root;
+
+    if (path[0] == '/') path++;
+
     char first_part[128];
     int i = 0;
     while (path[i] && path[i] != '/') {
@@ -39,7 +41,6 @@ vfs_node_t *vfs_open(const char *path) {
     /* 1. Buscar en los puntos de montaje */
     for (int j = 0; j < mount_count; j++) {
         if (strcmp(mount_points[j]->name, first_part) == 0) {
-            /* Si hay más path (ej: ram/test.txt), buscar dentro del montaje */
             if (path[i] == '/') {
                 if (mount_points[j]->ops && mount_points[j]->ops->finddir) {
                     return mount_points[j]->ops->finddir(mount_points[j], path + i + 1);
@@ -49,8 +50,10 @@ vfs_node_t *vfs_open(const char *path) {
         }
     }
 
-    /* 2. Buscar en el root si no se encontró un montaje coincidente */
-    if (vfs_root->ops && vfs_root->ops->finddir) return vfs_root->ops->finddir(vfs_root, path);
+    /* 2. Buscar recursivamente en el root */
+    if (vfs_root->ops && vfs_root->ops->finddir) {
+        return vfs_root->ops->finddir(vfs_root, path);
+    }
 
     return NULL;
 }

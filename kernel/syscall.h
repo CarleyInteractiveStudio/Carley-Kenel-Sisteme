@@ -18,6 +18,8 @@
 #define SYS_GET_INFO   11
 #define SYS_TIME       12
 #define SYS_AUDIO_PLAY 13
+#define SYS_MMAP       14
+#define SYS_IOPL       15
 
 void syscall_init(void);
 context_t *syscall_handler(context_t *ctx);

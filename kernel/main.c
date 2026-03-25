@@ -37,22 +37,27 @@ __attribute__((used, section(".requests"))) volatile struct limine_smp_request s
 static void hlt(void) { for (;;) { __asm__("hlt"); } }
 
 void ap_main(struct limine_smp_info *info) {
-    (void)info;
+    cpu_enable_features();
+    cpu_init_local(info->lapic_id);
     gdt_init();
+    idt_init();
     for (;;) __asm__("hlt");
 }
 
 void draw_splash(void) {
     video_clear(0x000000);
     video_draw_string("CARLEY OS", 270, 200, 0xFFFFFF);
-    video_draw_rect(220, 230, 200, 10, 0x555555); // Background bar
-    video_draw_rect(220, 230, 50, 10, 0x3498DB);  // Progress bar
-    for(int i=0; i<10000000; i++) __asm__("pause");
+    video_draw_rect(220, 230, 200, 10, 0x555555);
+    video_draw_rect(220, 230, 50, 10, 0x3498DB);
 }
 
 void kmain(void) {
     if (LIMINE_BASE_REVISION_SUPPORTED == false) hlt();
     cpu_enable_features();
+
+    /* Inicializar el núcleo actual (BSP) */
+    cpu_init_local(0);
+
     pmm_init();
     vmm_init();
     kheap_init();
@@ -84,10 +89,7 @@ void kmain(void) {
     if (framebuffer_request.response == NULL || framebuffer_request.response->framebuffer_count < 1) hlt();
     struct limine_framebuffer *fb = framebuffer_request.response->framebuffers[0];
     video_init(fb);
-
-    /* Mostrar Splash Screen */
     draw_splash();
-
     video_clear(0x1E1E1E);
     mouse_init();
     composer_start();
