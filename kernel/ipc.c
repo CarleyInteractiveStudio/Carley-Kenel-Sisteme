@@ -7,7 +7,16 @@
 static spinlock_t ipc_lock = 0;
 
 int ipc_send(uint64_t dest_id, void *msg) {
-    task_t *dest = (dest_id == 0) ? sched_get_current_task() : sched_get_task_by_id(dest_id);
+    task_t *dest;
+    if (dest_id == 0) dest = sched_get_current_task();
+    else if (dest_id < 100) {
+        // IDs reservados para servicios del sistema
+        // ID 1 = Composer/Graphics Server
+        dest = sched_get_task_by_id(dest_id);
+    } else {
+        dest = sched_get_task_by_id(dest_id);
+    }
+
     if (!dest) return -1;
 
     ipc_msg_t *m = (ipc_msg_t *)msg;

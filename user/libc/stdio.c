@@ -24,6 +24,19 @@ int puts(const char *s) {
     return 0;
 }
 
+char *fgets(char *s, int size, FILE *stream) {
+    int i = 0;
+    while (i < size - 1) {
+        char c;
+        if (fread(&c, 1, 1, stream) < 1) break;
+        s[i++] = c;
+        if (c == '\n') break;
+    }
+    if (i == 0) return NULL;
+    s[i] = 0;
+    return s;
+}
+
 static void print_uint(uint64_t n, int base) {
     char buf[32];
     int i = 0;
@@ -96,11 +109,11 @@ int printf(const char *format, ...) {
 
 FILE *fopen(const char *path, const char *mode) {
     (void)mode;
-    void *node = (void *)syscall1(SYS_OPEN, (long)path);
-    if (!node) return NULL;
+    long fd = syscall1(SYS_OPEN, (long)path);
+    if (fd < 0) return NULL;
 
     FILE *f = malloc(sizeof(FILE));
-    f->vfs_node = node;
+    f->vfs_node = (void *)fd;
     f->pos = 0;
     f->error = 0;
     return f;

@@ -28,7 +28,8 @@ public:
         msg.sender = 1001;
         msg.type = COMPOSER_DRAW_RECT;
         msg.data[0] = x; msg.data[1] = y; msg.data[2] = w; msg.data[3] = h; msg.data[4] = color;
-        syscall3(1, 0, (long)&msg, 0);
+        // Enviar al Graphics Server (ID 1)
+        syscall3(1, 1, (long)&msg, 0);
     }
 };
 
@@ -54,7 +55,8 @@ public:
         msg.data[1] = x_pos + 5; msg.data[2] = y_pos + 65; msg.data[3] = 0xFFFFFF;
         for(int i=0; name[i]; i++) {
             msg.data[0] = name[i];
-            syscall3(1, 0, (long)&msg, 0);
+            // Enviar al Graphics Server (ID 1)
+            syscall3(1, 1, (long)&msg, 0);
             msg.data[1] += 8;
         }
     }

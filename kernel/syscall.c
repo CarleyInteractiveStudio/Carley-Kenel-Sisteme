@@ -18,21 +18,46 @@ context_t *syscall_handler(context_t *ctx) {
         case SYS_YIELD: return sched_schedule(ctx);
         case SYS_IPC_SEND: ctx->rax = ipc_send(ctx->rdi, (void *)ctx->rsi); break;
         case SYS_IPC_RECV: ctx->rax = ipc_recv((void *)ctx->rdi); break;
-        case SYS_OPEN: ctx->rax = (uintptr_t)vfs_open((const char *)ctx->rdi); break;
-        case SYS_READ:
-            if (ctx->rdi == 0) ctx->rax = kbd_buf_read((char *)ctx->r10, (size_t)ctx->rdx);
-            else ctx->rax = vfs_read((vfs_node_t *)ctx->rdi, (uint32_t)ctx->rsi, (uint32_t)ctx->rdx, (uint8_t *)ctx->r10);
+        case SYS_OPEN: {
+            vfs_node_t *node = vfs_open((const char *)ctx->rdi);
+            if (!node) { ctx->rax = -1; break; }
+            task_t *curr = sched_get_current_task();
+            int fd = -1;
+            for (int i = 2; i < MAX_FILES_PER_TASK; i++) {
+                if (curr->files[i] == NULL) { fd = i; break; }
+            }
+            if (fd != -1) { curr->files[fd] = node; ctx->rax = fd; }
+            else ctx->rax = -1;
             break;
-        case SYS_WRITE:
+        }
+        case SYS_READ: {
+            if (ctx->rdi == 0) { ctx->rax = kbd_buf_read((char *)ctx->r10, (size_t)ctx->rdx); break; }
+            if (ctx->rdi >= MAX_FILES_PER_TASK) { ctx->rax = -1; break; }
+            vfs_node_t *node = sched_get_current_task()->files[ctx->rdi];
+            if (!node) { ctx->rax = -1; break; }
+            ctx->rax = vfs_read(node, (uint32_t)ctx->rsi, (uint32_t)ctx->rdx, (uint8_t *)ctx->r10);
+            break;
+        }
+        case SYS_WRITE: {
             if (ctx->rdi == 1) {
                 char *buf = (char *)ctx->r10;
                 for (size_t i = 0; i < ctx->rdx; i++) video_terminal_write(buf[i], 0xFFFFFF);
                 ctx->rax = ctx->rdx;
-            } else {
-                ctx->rax = vfs_write((vfs_node_t *)ctx->rdi, (uint32_t)ctx->rsi, (uint32_t)ctx->rdx, (uint8_t *)ctx->r10);
+                break;
             }
+            if (ctx->rdi >= MAX_FILES_PER_TASK) { ctx->rax = -1; break; }
+            vfs_node_t *node = sched_get_current_task()->files[ctx->rdi];
+            if (!node) { ctx->rax = -1; break; }
+            ctx->rax = vfs_write(node, (uint32_t)ctx->rsi, (uint32_t)ctx->rdx, (uint8_t *)ctx->r10);
             break;
-        case SYS_READDIR: ctx->rax = vfs_readdir((vfs_node_t *)ctx->rdi, (uint32_t)ctx->rsi, (vfs_dirent_t *)ctx->rdx); break;
+        }
+        case SYS_READDIR: {
+            if (ctx->rdi >= MAX_FILES_PER_TASK) { ctx->rax = -1; break; }
+            vfs_node_t *node = sched_get_current_task()->files[ctx->rdi];
+            if (!node) { ctx->rax = -1; break; }
+            ctx->rax = vfs_readdir(node, (uint32_t)ctx->rsi, (vfs_dirent_t *)ctx->rdx);
+            break;
+        }
         case SYS_CLOSE:
             if (ctx->rdi < MAX_FILES_PER_TASK) { sched_get_current_task()->files[ctx->rdi] = NULL; ctx->rax = 0; }
             else { ctx->rax = -1; }

@@ -30,43 +30,51 @@ vfs_node_t *vfs_open(const char *path) {
     spin_lock(&vfs_lock);
     if (!vfs_root || !path) { spin_unlock(&vfs_lock); return NULL; }
 
-    /* Si es la raiz */
     if (strcmp(path, "/") == 0) { spin_unlock(&vfs_lock); return vfs_root; }
 
-    if (path[0] == '/') path++;
+    const char *p = path;
+    if (p[0] == '/') p++;
 
-    char first_part[128];
+    char part[128];
+    vfs_node_t *curr = vfs_root;
+
+    // 1. Verificar si empieza por un punto de montaje
     int i = 0;
-    while (path[i] && path[i] != '/' && i < 127) {
-        first_part[i] = path[i];
-        i++;
-    }
-    first_part[i] = 0;
+    while (p[i] && p[i] != '/' && i < 127) { part[i] = p[i]; i++; }
+    part[i] = 0;
 
-    /* 1. Buscar en los puntos de montaje */
     for (int j = 0; j < mount_count; j++) {
-        if (strcmp(mount_points[j]->name, first_part) == 0) {
-            if (path[i] == '/') {
-                if (mount_points[j]->ops && mount_points[j]->ops->finddir) {
-                    vfs_node_t *res = mount_points[j]->ops->finddir(mount_points[j], path + i + 1);
-                    spin_unlock(&vfs_lock);
-                    return res;
-                }
-            }
-            spin_unlock(&vfs_lock);
-            return mount_points[j];
+        if (strcmp(mount_points[j]->name, part) == 0) {
+            curr = mount_points[j];
+            p += i;
+            if (p[0] == '/') p++;
+            break;
         }
     }
 
-    /* 2. Buscar recursivamente en el root */
-    if (vfs_root->ops && vfs_root->ops->finddir) {
-        vfs_node_t *res = vfs_root->ops->finddir(vfs_root, path);
-        spin_unlock(&vfs_lock);
-        return res;
+    // 2. Navegación recursiva/secuencial
+    while (*p) {
+        i = 0;
+        while (p[i] && p[i] != '/' && i < 127) { part[i] = p[i]; i++; }
+        part[i] = 0;
+
+        if (strcmp(part, ".") == 0) { /* Ignorar */ }
+        else if (strcmp(part, "..") == 0) {
+            /* No soportado aún de forma genérica sin puntero 'parent' */
+        } else if (curr->ops && curr->ops->finddir) {
+            vfs_node_t *next = curr->ops->finddir(curr, part);
+            if (!next) { spin_unlock(&vfs_lock); return NULL; }
+            curr = next;
+        } else {
+            spin_unlock(&vfs_lock); return NULL;
+        }
+
+        p += i;
+        if (p[0] == '/') p++;
     }
 
     spin_unlock(&vfs_lock);
-    return NULL;
+    return curr;
 }
 
 int vfs_readdir(vfs_node_t *node, uint32_t index, vfs_dirent_t *dirent) {

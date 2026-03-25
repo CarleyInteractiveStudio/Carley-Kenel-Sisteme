@@ -25,7 +25,7 @@ uint64_t get_cpu_id(void) {
 void sched_init(void) {
     task_t *kernel_idle = kmalloc(sizeof(task_t));
     memset(kernel_idle, 0, sizeof(task_t));
-    kernel_idle->id = 0;
+    kernel_idle->id = 0; // Kernel Idle
     kernel_idle->state = TASK_RUNNING;
     kernel_idle->cpu_id = 0;
     kernel_idle->pml4 = vmm_get_kernel_pagemap();
@@ -91,6 +91,8 @@ context_t *sched_schedule(context_t *current_context) {
 
     spin_lock(&sched_lock);
     curr->context = current_context;
+    __asm__ volatile("fxsave %0" : : "m"(curr->fpu_state));
+
     if (curr->state == TASK_RUNNING) {
         curr->state = TASK_READY;
         curr->cpu_id = -1;
@@ -118,6 +120,8 @@ context_t *sched_schedule(context_t *current_context) {
     local->current_task = next_task;
     next_task->state = TASK_RUNNING;
     next_task->cpu_id = my_cpu;
+    __asm__ volatile("fxrstor %0" : : "m"(next_task->fpu_state));
+
     vmm_switch_pagemap(next_task->pml4);
     tss_set_rsp0((uint64_t)next_task->kernel_stack + STACK_SIZE);
     spin_unlock(&sched_lock);

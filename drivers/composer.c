@@ -2,6 +2,10 @@
 #include "video.h"
 #include "kernel/sched.h"
 #include "kernel/ipc.h"
+#include <stdbool.h>
+
+static wm_window_t windows[MAX_WINDOWS];
+static int window_count = 0;
 
 static void draw_sprite(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint32_t *data) {
     for (uint32_t i = 0; i < h; i++) {
@@ -11,6 +15,17 @@ static void draw_sprite(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint32_t
             if (color != 0xFF00FF) {
                 video_put_pixel(x + j, y + i, color);
             }
+        }
+    }
+}
+
+static void wm_redraw_all() {
+    video_clear(0x1E1E1E);
+    for (int i = 0; i < window_count; i++) {
+        if (windows[i].active) {
+            // Marco de la ventana (Estilo Apple Glass)
+            video_draw_rect(windows[i].x, windows[i].y, windows[i].w, windows[i].h, 0x88333333);
+            video_draw_rect(windows[i].x, windows[i].y, windows[i].w, 20, 0xCC555555); // Barra de titulo
         }
     }
 }
@@ -34,8 +49,19 @@ void composer_task(void) {
                     video_clear((uint32_t)msg.data[0]);
                     break;
                 case COMPOSER_DRAW_SPRITE:
-                    /* data[0]=x, data[1]=y, data[2]=w, data[3]=h, data[4]=ptr_data */
                     draw_sprite((uint32_t)msg.data[0], (uint32_t)msg.data[1], (uint32_t)msg.data[2], (uint32_t)msg.data[3], (uint32_t *)msg.data[4]);
+                    break;
+                case COMPOSER_CREATE_WINDOW:
+                    if (window_count < MAX_WINDOWS) {
+                        windows[window_count].x = (uint32_t)msg.data[0];
+                        windows[window_count].y = (uint32_t)msg.data[1];
+                        windows[window_count].w = (uint32_t)msg.data[2];
+                        windows[window_count].h = (uint32_t)msg.data[3];
+                        windows[window_count].owner_id = msg.sender;
+                        windows[window_count].active = true;
+                        window_count++;
+                        wm_redraw_all();
+                    }
                     break;
             }
         }
@@ -44,5 +70,6 @@ void composer_task(void) {
 }
 
 void composer_start(void) {
-    sched_create_task(composer_task, false);
+    task_t *t = sched_create_task(composer_task, false);
+    t->id = 1; // Reservado para Graphics Server
 }

@@ -53,6 +53,7 @@ typedef struct task {
     /* Tabla de descriptores de archivos del proceso */
     vfs_node_t *files[MAX_FILES_PER_TASK];
     uint32_t capabilities;
+    uint8_t fpu_state[512] __attribute__((aligned(16)));
 
     struct task *next;
 } task_t;

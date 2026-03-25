@@ -17,6 +17,7 @@ typedef struct {
 int printf(const char *format, ...);
 int putchar(int c);
 int puts(const char *s);
+char *fgets(char *s, int size, FILE *stream);
 
 FILE *fopen(const char *path, const char *mode);
 size_t fread(void *ptr, size_t size, size_t nmemb, FILE *stream);

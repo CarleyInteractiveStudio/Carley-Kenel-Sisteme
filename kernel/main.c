@@ -93,6 +93,9 @@ void kmain(void) {
     }
 
     pit_init(100);
+    /* Tarea para el mezclador de audio */
+    sched_create_task(audio_mixer_step, false);
+
     if (framebuffer_request.response == NULL || framebuffer_request.response->framebuffer_count < 1) hlt();
     struct limine_framebuffer *fb = framebuffer_request.response->framebuffers[0];
     video_init(fb);
