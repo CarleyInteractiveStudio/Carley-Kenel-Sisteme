@@ -7,6 +7,15 @@
 static wm_window_t windows[MAX_WINDOWS];
 static int window_count = 0;
 
+#define MAX_ICONS 32
+typedef struct {
+    uint32_t w, h;
+    uint32_t *data;
+    bool used;
+} composer_icon_t;
+
+static composer_icon_t icons[MAX_ICONS];
+
 static void draw_sprite(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint32_t *data) {
     for (uint32_t i = 0; i < h; i++) {
         for (uint32_t j = 0; j < w; j++) {
@@ -51,6 +60,18 @@ void composer_task(void) {
                 case COMPOSER_DRAW_SPRITE:
                     draw_sprite((uint32_t)msg.data[0], (uint32_t)msg.data[1], (uint32_t)msg.data[2], (uint32_t)msg.data[3], (uint32_t *)msg.data[4]);
                     break;
+                case COMPOSER_LOAD_ICON: {
+                    for (int i = 0; i < MAX_ICONS; i++) {
+                        if (!icons[i].used) {
+                            icons[i].w = (uint32_t)msg.data[0];
+                            icons[i].h = (uint32_t)msg.data[1];
+                            icons[i].data = (uint32_t *)msg.data[2];
+                            icons[i].used = true;
+                            break;
+                        }
+                    }
+                    break;
+                }
                 case COMPOSER_CREATE_WINDOW:
                     if (window_count < MAX_WINDOWS) {
                         windows[window_count].x = (uint32_t)msg.data[0];
