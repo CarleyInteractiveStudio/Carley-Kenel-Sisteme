@@ -36,6 +36,7 @@ syscall3:
     ret
 
 syscall4:
+    # num=RDI, arg1=RSI, arg2=RDX, arg3=RCX, arg4=R8
     mov %rdi, %rax
     mov %rsi, %rdi
     mov %rdx, %rsi

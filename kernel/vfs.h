@@ -21,6 +21,8 @@ typedef struct {
     uint32_t (*write)(struct vfs_node *node, uint32_t offset, uint32_t size, uint8_t *buffer);
     struct vfs_node *(*finddir)(struct vfs_node *node, const char *name);
     int (*readdir)(struct vfs_node *node, uint32_t index, vfs_dirent_t *dirent);
+    int (*create)(struct vfs_node *node, const char *name, uint32_t size);
+    int (*mkdir)(struct vfs_node *node, const char *name);
 } vfs_ops_t;
 
 typedef struct vfs_node {
@@ -39,5 +41,7 @@ uint32_t vfs_read(vfs_node_t *node, uint32_t offset, uint32_t size, uint8_t *buf
 uint32_t vfs_write(vfs_node_t *node, uint32_t offset, uint32_t size, uint8_t *buffer);
 vfs_node_t *vfs_open(const char *path);
 int vfs_readdir(vfs_node_t *node, uint32_t index, vfs_dirent_t *dirent);
+int vfs_create(const char *path, uint32_t size);
+int vfs_mkdir(const char *path);
 
 #endif

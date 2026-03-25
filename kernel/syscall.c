@@ -20,16 +20,16 @@ context_t *syscall_handler(context_t *ctx) {
         case SYS_IPC_RECV: ctx->rax = ipc_recv((void *)ctx->rdi); break;
         case SYS_OPEN: ctx->rax = (uintptr_t)vfs_open((const char *)ctx->rdi); break;
         case SYS_READ:
-            if (ctx->rdi == 0) ctx->rax = kbd_buf_read((char *)ctx->rsi, (size_t)ctx->rdx);
-            else ctx->rax = vfs_read((vfs_node_t *)ctx->rdi, 0, (uint32_t)ctx->rdx, (uint8_t *)ctx->rsi);
+            if (ctx->rdi == 0) ctx->rax = kbd_buf_read((char *)ctx->r10, (size_t)ctx->rdx);
+            else ctx->rax = vfs_read((vfs_node_t *)ctx->rdi, (uint32_t)ctx->rsi, (uint32_t)ctx->rdx, (uint8_t *)ctx->r10);
             break;
         case SYS_WRITE:
             if (ctx->rdi == 1) {
-                char *buf = (char *)ctx->rsi;
+                char *buf = (char *)ctx->r10;
                 for (size_t i = 0; i < ctx->rdx; i++) video_terminal_write(buf[i], 0xFFFFFF);
                 ctx->rax = ctx->rdx;
             } else {
-                ctx->rax = vfs_write((vfs_node_t *)ctx->rdi, 0, (uint32_t)ctx->rdx, (uint8_t *)ctx->rsi);
+                ctx->rax = vfs_write((vfs_node_t *)ctx->rdi, (uint32_t)ctx->rsi, (uint32_t)ctx->rdx, (uint8_t *)ctx->r10);
             }
             break;
         case SYS_READDIR: ctx->rax = vfs_readdir((vfs_node_t *)ctx->rdi, (uint32_t)ctx->rsi, (vfs_dirent_t *)ctx->rdx); break;

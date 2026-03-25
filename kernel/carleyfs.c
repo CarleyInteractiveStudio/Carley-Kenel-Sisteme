@@ -15,6 +15,30 @@ static void cfs_load_inodes(void) {
     inodes_loaded = true;
 }
 
+static uint32_t cfs_write(vfs_node_t *node, uint32_t offset, uint32_t size, uint8_t *buffer) {
+    carleyfs_inode_t *inode = (carleyfs_inode_t *)node->priv_data;
+    if (offset >= inode->size) return 0;
+    if (offset + size > inode->size) size = inode->size - offset;
+
+    uint32_t start_lba = inode->start_sector + (offset / 512);
+    uint32_t sector_offset = offset % 512;
+    uint8_t temp_buf[512];
+
+    uint32_t written_bytes = 0;
+    while (written_bytes < size) {
+        ide_read_sectors(start_lba, 1, temp_buf);
+        uint32_t to_copy = 512 - sector_offset;
+        if (to_copy > size - written_bytes) to_copy = size - written_bytes;
+
+        memcpy(temp_buf + sector_offset, buffer + written_bytes, to_copy);
+        ide_write_sectors(start_lba++, 1, temp_buf);
+
+        written_bytes += to_copy;
+        sector_offset = 0;
+    }
+    return size;
+}
+
 static uint32_t cfs_read(vfs_node_t *node, uint32_t offset, uint32_t size, uint8_t *buffer) {
     carleyfs_inode_t *inode = (carleyfs_inode_t *)node->priv_data;
     if (offset >= inode->size) return 0;
@@ -66,7 +90,7 @@ static vfs_node_t *cfs_finddir(vfs_node_t *node, const char *name) {
             fn->size = inodes[i].size;
             fn->type = VFS_FILE;
             fn->priv_data = &inodes[i];
-            static vfs_ops_t ops = {.read = cfs_read, .write = NULL, .finddir = NULL, .readdir = NULL};
+            static vfs_ops_t ops = {.read = cfs_read, .write = cfs_write, .finddir = NULL, .readdir = NULL};
             fn->ops = &ops;
             return fn;
         }

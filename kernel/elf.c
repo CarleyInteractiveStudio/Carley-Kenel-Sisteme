@@ -78,6 +78,7 @@ int elf_load_ext(const char *path, int argc, char **argv) {
         /* En el futuro, el propio ldso abrirá y mapeará libc.so usando syscalls (mmap, open, read) */
     }
 
+    // Pasamos argc y argv al nuevo proceso
     new_task->context->rdi = argc;
     new_task->context->rsi = (uint64_t)argv;
     new_task->context->rip = entry_point;

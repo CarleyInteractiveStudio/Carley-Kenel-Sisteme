@@ -100,6 +100,7 @@ void kmain(void) {
     video_clear(0x1E1E1E);
     mouse_init();
     composer_start();
+    elf_load("input.elf");
     elf_load("shell.elf");
 
     __asm__ volatile("sti");

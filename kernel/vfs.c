@@ -73,3 +73,13 @@ int vfs_readdir(vfs_node_t *node, uint32_t index, vfs_dirent_t *dirent) {
     if (node && node->ops && node->ops->readdir) return node->ops->readdir(node, index, dirent);
     return -1;
 }
+
+int vfs_create(const char *path, uint32_t size) {
+    // Implementación simplificada: busca el directorio padre y llama a create
+    // En este sistema, asumimos que path es "dir/file"
+    return -1; // Placeholder para implementación completa
+}
+
+int vfs_mkdir(const char *path) {
+    return -1; // Placeholder
+}
