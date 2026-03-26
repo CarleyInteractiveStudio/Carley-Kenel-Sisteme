@@ -7,10 +7,13 @@ extern "C" {
 #include <stdlib.h>
 }
 
+#include <string.h>
+
 #define COMPOSER_DRAW_RECT     2
 #define COMPOSER_DRAW_CHAR     3
 #define COMPOSER_CREATE_WINDOW 10
 
+#define SYS_AUDIO_PLAY 13
 #define SYS_YIELD     0
 #define SYS_IPC_SEND  1
 #define SYS_IPC_RECV  2
@@ -40,11 +43,27 @@ bool menu_open = false;
 bool notifications_open = false;
 bool settings_open = false;
 
+char dynamic_notif[64] = "1. Welcome to Carley!";
+
 void draw_dashboard() {
     ipc_msg_t msg;
     msg.sender = 1001;
 
-    // Draw Desktop Area (Optional, composer might clear)
+    // Draw Desktop Shortcuts
+    for (int i = 0; i < 3; i++) {
+        msg.type = COMPOSER_DRAW_RECT;
+        msg.data[0] = 20; msg.data[1] = 50 + i * 100; msg.data[2] = 60; msg.data[3] = 60;
+        msg.data[4] = apps[i].icon_color;
+        syscall3(SYS_IPC_SEND, 1, (long)&msg, 0);
+
+        msg.type = COMPOSER_DRAW_CHAR;
+        msg.data[1] = 20; msg.data[2] = 115 + i * 100; msg.data[3] = 0xFFFFFF;
+        for(int j=0; apps[i].name[j]; j++) {
+            msg.data[0] = apps[i].name[j];
+            syscall3(SYS_IPC_SEND, 1, (long)&msg, 0);
+            msg.data[1] += 8;
+        }
+    }
 
     // Draw Bottom Dock Bubble
     msg.type = COMPOSER_DRAW_RECT;
@@ -65,10 +84,17 @@ void draw_dashboard() {
 
         msg.type = COMPOSER_DRAW_CHAR;
         msg.data[1] = 20; msg.data[2] = 50; msg.data[3] = 0xFFFFFF;
-        const char *notif = "NOTIFICATIONS\n-------------\n1. System is ready\n2. Memory: Stable";
-        for(int j=0; notif[j]; j++) {
-            if (notif[j] == '\n') { msg.data[1] = 20; msg.data[2] += 20; continue; }
-            msg.data[0] = notif[j];
+        const char *notif_hdr = "NOTIFICATIONS\n-------------";
+        for(int j=0; notif_hdr[j]; j++) {
+            if (notif_hdr[j] == '\n') { msg.data[1] = 20; msg.data[2] += 20; continue; }
+            msg.data[0] = notif_hdr[j];
+            syscall3(SYS_IPC_SEND, 1, (long)&msg, 0);
+            msg.data[1] += 8;
+        }
+
+        msg.data[1] = 20; msg.data[2] += 20;
+        for(int j=0; dynamic_notif[j]; j++) {
+            msg.data[0] = dynamic_notif[j];
             syscall3(SYS_IPC_SEND, 1, (long)&msg, 0);
             msg.data[1] += 8;
         }
@@ -135,7 +161,11 @@ int main() {
     while(1) {
         ipc_msg_t rmsg;
         if (syscall3(SYS_IPC_RECV, 0, (long)&rmsg, 0) == 0) {
-            if (rmsg.type == 21) { // WM_CLICK
+            if (rmsg.type == 50) { // NEW_NOTIFICATION
+                strncpy(dynamic_notif, (char*)rmsg.data, 63);
+                dynamic_notif[63] = 0;
+                draw_dashboard();
+            } else if (rmsg.type == 21) { // WM_CLICK
                 int cx = rmsg.data[0];
                 int cy = rmsg.data[1];
 
@@ -150,8 +180,18 @@ int main() {
                 // Main Button Toggle
                 if (cx >= 375 && cx <= 425 && cy >= 525 && cy <= 575) {
                     menu_open = !menu_open;
+                    // Play pop sound
+                    uint8_t sound[128];
+                    for(int s=0; s<128; s++) sound[s] = (s % 2) ? 0x80 : 0x00;
+                    syscall3(SYS_AUDIO_PLAY, (long)sound, 128, 0);
                     notifications_open = false; settings_open = false;
                     draw_dashboard();
+                } else if (!menu_open && cx >= 20 && cx <= 80) {
+                    // Check desktop shortcuts
+                    int shortcut_idx = (cy - 50) / 100;
+                    if (shortcut_idx >= 0 && shortcut_idx < 3 && (cy % 100) >= 0 && (cy % 100) <= 60) {
+                        syscall1(SYS_SPAWN, (long)apps[shortcut_idx].elf);
+                    }
                 } else if (menu_open) {
                     // Check app clicks
                     for (int i = 0; i < 6; i++) {

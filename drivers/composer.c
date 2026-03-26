@@ -7,6 +7,7 @@
 
 static wm_window_t windows[MAX_WINDOWS];
 static int window_count = 0;
+static uint32_t *wallpaper_data = NULL;
 static uint32_t mouse_x = 400, mouse_y = 300, mouse_btn = 0, last_mouse_btn = 0;
 static int drag_win_idx = -1;
 static uint32_t drag_off_x = 0, drag_off_y = 0;
@@ -42,7 +43,20 @@ static void wm_bring_to_front(int index) {
 }
 
 static void wm_redraw_all() {
-    video_clear(0x1E1E1E);
+    if (wallpaper_data) {
+        // Asumimos que el wallpaper es del tamaño de la pantalla
+        // Para simplificar en este entorno, usamos un draw_sprite gigante
+        // O mejor una copia directa al FB si es posible.
+        // Pero composer no tiene acceso directo al FB struct de video.c de forma limpia
+        // Usaremos video_put_pixel por ahora
+        for(uint32_t y=0; y<600; y++) {
+            for(uint32_t x=0; x<800; x++) {
+                video_put_pixel(x, y, wallpaper_data[y * 800 + x]);
+            }
+        }
+    } else {
+        video_clear(0x1E1E1E);
+    }
 
     // 1. Dibujar Ventanas
     for (int i = 0; i < window_count; i++) {
@@ -102,6 +116,10 @@ void composer_task(void) {
                     }
                     break;
                 }
+                case 40: // SET_WALLPAPER
+                    wallpaper_data = (uint32_t *)shm_at(msg.data[0], 0);
+                    wm_redraw_all();
+                    break;
                 case COMPOSER_CREATE_WINDOW:
                     if (window_count < MAX_WINDOWS) {
                         windows[window_count].x = (uint32_t)msg.data[0];
