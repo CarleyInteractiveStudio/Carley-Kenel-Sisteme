@@ -45,12 +45,49 @@ bool settings_open = false;
 
 char dynamic_notif[64] = "1. Welcome to Carley!";
 char search_query[32] = "";
+char active_app_name[32] = "Desktop";
 
 void draw_dashboard() {
     ipc_msg_t msg;
     msg.sender = 1001;
 
-    // Draw Desktop Shortcuts
+    // 1. Draw Global Top Menu Bar
+    msg.type = COMPOSER_DRAW_RECT;
+    msg.data[0] = 0; msg.data[1] = 0; msg.data[2] = 800; msg.data[3] = 30;
+    msg.data[4] = 0xCC1A1A1A; // Translucent dark
+    syscall3(SYS_IPC_SEND, 1, (long)&msg, 0);
+
+    msg.type = COMPOSER_DRAW_CHAR;
+    msg.data[3] = 0xFFFFFF;
+
+    // Carley Logo / Menu
+    const char *logo = "CARLEY";
+    msg.data[1] = 10; msg.data[2] = 10;
+    for(int j=0; logo[j]; j++) {
+        msg.data[0] = logo[j];
+        syscall3(SYS_IPC_SEND, 1, (long)&msg, 0);
+        msg.data[1] += 8;
+    }
+
+    // Active App Name
+    msg.data[1] = 80; msg.data[2] = 10;
+    msg.data[3] = 0xAAAAAA; // Gray for app name
+    for(int j=0; active_app_name[j]; j++) {
+        msg.data[0] = active_app_name[j];
+        syscall3(SYS_IPC_SEND, 1, (long)&msg, 0);
+        msg.data[1] += 8;
+    }
+
+    // Right Side: Time & Status
+    const char *time_str = "12:00 PM"; // Simulated for now
+    msg.data[1] = 730; msg.data[2] = 10;
+    for(int j=0; time_str[j]; j++) {
+        msg.data[0] = time_str[j];
+        syscall3(SYS_IPC_SEND, 1, (long)&msg, 0);
+        msg.data[1] += 8;
+    }
+
+    // 2. Draw Desktop Shortcuts
     for (int i = 0; i < 3; i++) {
         msg.type = COMPOSER_DRAW_RECT;
         msg.data[0] = 20; msg.data[1] = 50 + i * 100; msg.data[2] = 60; msg.data[3] = 60;
@@ -196,6 +233,11 @@ int main() {
             } else if (rmsg.type == 50) { // NEW_NOTIFICATION
                 strncpy(dynamic_notif, (char*)rmsg.data, 63);
                 dynamic_notif[63] = 0;
+                draw_dashboard();
+            } else if (rmsg.type == 42) { // FOCUS_CHANGED
+                // In a real system, we'd lookup the name by PID
+                // For now, let's assume it's one of our known apps or just "App"
+                strcpy(active_app_name, "Active App");
                 draw_dashboard();
             } else if (rmsg.type == 21) { // WM_CLICK
                 int cx = rmsg.data[0];

@@ -11,6 +11,7 @@ static uint32_t *wallpaper_data = NULL;
 static uint32_t mouse_x = 400, mouse_y = 300, mouse_btn = 0, last_mouse_btn = 0;
 static int drag_win_idx = -1;
 static uint32_t drag_off_x = 0, drag_off_y = 0;
+static bool mission_control = false;
 
 #define MAX_ICONS 32
 typedef struct {
@@ -63,6 +64,20 @@ static void wm_animate_step() {
 }
 
 static void wm_redraw_all() {
+    if (mission_control) {
+        video_clear(0x000000);
+        // Mostrar ventanas en miniatura (simplificado: rectángulos con el nombre)
+        for (int i = 0; i < window_count; i++) {
+            if (windows[i].active) {
+                int grid_x = 50 + (i % 4) * 180;
+                int grid_y = 50 + (i / 4) * 150;
+                video_draw_rounded_rect(grid_x, grid_y, 150, 100, 8, 0x88555555);
+                video_draw_string("Task Window", grid_x + 10, grid_y + 40, 0xFFFFFF);
+            }
+        }
+        return;
+    }
+
     if (wallpaper_data) {
         // Asumimos que el wallpaper es del tamaño de la pantalla
         // Para simplificar en este entorno, usamos un draw_sprite gigante
@@ -141,6 +156,10 @@ void composer_task(void) {
                     wallpaper_data = (uint32_t *)shm_at(msg.data[0], 0);
                     wm_redraw_all();
                     break;
+                case 41: // TOGGLE_MISSION_CONTROL
+                    mission_control = !mission_control;
+                    wm_redraw_all();
+                    break;
                 case COMPOSER_CREATE_WINDOW:
                     if (window_count < MAX_WINDOWS) {
                         windows[window_count].x = (uint32_t)msg.data[0];
@@ -172,6 +191,13 @@ void composer_task(void) {
 
                                 wm_bring_to_front(i);
                                 int idx = window_count - 1; // Ahora es la ultima
+
+                                /* Notificar al Shell del cambio de foco (ID 1001) */
+                                ipc_msg_t fm;
+                                fm.sender = 1;
+                                fm.type = 42; // FOCUS_CHANGED
+                                fm.data[0] = windows[idx].owner_id;
+                                ipc_send(1001, &fm);
 
                                 // ¿Es en la barra de titulo? (24 px segun video.c rounded rect)
                                 if (mouse_y >= windows[idx].y && mouse_y <= windows[idx].y + 24) {
