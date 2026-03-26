@@ -27,13 +27,22 @@ Carley OS es un sistema operativo moderno, seguro y visualmente atractivo diseñ
 
 Carley OS utiliza C para el núcleo y C++ para las aplicaciones de alto nivel para garantizar la máxima eficiencia y potencia.
 
-### Requisitos de Construcción
-*   GNU Make
-*   x86_64-elf-gcc / g++
-*   xorriso (para generar la ISO)
+### 🛠️ Guía de Inicio Rápido para Desarrolladores
 
-### Comandos
-```bash
-make        # Compilar kernel y aplicaciones
-make iso    # Generar imagen bootable para VirtualBox/Hardware real
-```
+Si quieres compilar y probar Carley OS tú mismo, sigue estos pasos:
+
+1. **Instala las dependencias:** Consulta la [Guía de Compilación](docs/BUILD.md) para ver los comandos específicos de tu sistema operativo (Linux/macOS).
+2. **Compila el proyecto:**
+   ```bash
+   make
+   ```
+3. **Crea la ISO:**
+   ```bash
+   make iso
+   ```
+4. **Pruébalo en QEMU:**
+   ```bash
+   qemu-system-x86_64 -cdrom carley-kernel.iso -m 512M
+   ```
+
+Para más detalles técnicos, revisa la carpeta `docs/`.
