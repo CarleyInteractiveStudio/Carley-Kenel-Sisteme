@@ -36,6 +36,8 @@ iso: $(KERNEL) userland
 	cp limine.conf iso_root/boot/
 	cp user/*.elf iso_root/boot/
 	cp user/*.so iso_root/boot/
+	# Tambien copiar archivos de script/datos si existen
+	@if [ -f "user/demo.py" ]; then cp user/demo.py iso_root/boot/; fi
 
 	# Copiar binarios de Limine (asumiendo que están en ./limine/)
 	@if [ -d "limine" ]; then \

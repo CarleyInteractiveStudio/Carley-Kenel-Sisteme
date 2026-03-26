@@ -104,7 +104,7 @@ void kmain(void) {
     mouse_init();
     composer_start();
     elf_load("input.elf");
-    elf_load("shell.elf");
+    elf_load("shell_gui.elf");
 
     __asm__ volatile("sti");
     for (;;) hlt();
