@@ -92,10 +92,12 @@ bool CarleyWindow::poll_event(gui_event_t *event) {
     return gui_poll_event(win, event) != 0;
 }
 
+void gui_draw_button(gui_window_t *win, int x, int y, int w, int h, const char *label, uint32_t color) {
+    gui_draw_rect(win, x, y, w, h, color);
+    gui_draw_rect(win, x + 2, y + 2, w - 4, h - 4, 0x55000000);
+    // Para el texto en C usaremos syscall directa por ahora hasta tener motor de texto en libgui
+}
+
 void CarleyWindow::draw_button(int x, int y, int w, int h, const char *label, uint32_t color) {
-    draw_rect(x, y, w, h, color);
-    draw_rect(x + 2, y + 2, w - 4, h - 4, 0x55000000);
-    int text_x = x + (w / 2) - (strlen(label) * 4);
-    int text_y = y + (h / 2) - 4;
-    draw_text(text_x, text_y, label, 0xFFFFFF);
+    gui_draw_button(win, x, y, w, h, label, color);
 }

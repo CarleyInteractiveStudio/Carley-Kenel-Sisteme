@@ -28,6 +28,9 @@ typedef struct {
 #define GUI_EVENT_KEY   2
 #define GUI_EVENT_CLOSE 3
 
+#define GUI_THEME_GLASS 0x88FFFFFF
+#define GUI_THEME_DARK  0xAA1A1A1A
+
 typedef struct {
     uint32_t x, y, w, h;
     uint64_t owner_id;
@@ -40,6 +43,7 @@ gui_window_t *gui_window_create(const char *title, int x, int y, int w, int h);
 void gui_window_redraw(gui_window_t *win);
 void gui_draw_rect(gui_window_t *win, int x, int y, int w, int h, uint32_t color);
 void gui_draw_text(gui_window_t *win, int x, int y, const char *text, uint32_t color);
+void gui_draw_button(gui_window_t *win, int x, int y, int w, int h, const char *label, uint32_t color);
 int gui_poll_event(gui_window_t *win, gui_event_t *event);
 
 #ifdef __cplusplus

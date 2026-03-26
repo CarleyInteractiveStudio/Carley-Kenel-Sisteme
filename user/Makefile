@@ -33,6 +33,9 @@ $(LD_SO): ldso.o ldso_crt0.o $(LIBC_A)
 calc_gui.elf: calc.o $(LIBC_A)
 	$(CXX) $(LDFLAGS_STATIC) -T linker.ld calc.o $(LIBC_A) -o $@
 
+cpython.elf: cpython.o $(LIBC_A)
+	$(CXX) $(LDFLAGS_STATIC) -T linker.ld cpython.o $(LIBC_A) -o $@
+
 %.elf: %.o $(LIBC_A)
 	$(CC) $(LDFLAGS_STATIC) -T linker.ld $< $(LIBC_A) -o $@
 
