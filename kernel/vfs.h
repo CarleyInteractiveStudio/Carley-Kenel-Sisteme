@@ -31,6 +31,7 @@ typedef struct vfs_node {
     uint32_t size;
     vfs_ops_t *ops;
     void *priv_data;
+    struct vfs_node *parent;
 } vfs_node_t;
 
 extern vfs_node_t *vfs_root;

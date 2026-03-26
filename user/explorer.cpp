@@ -60,9 +60,21 @@ void draw_explorer() {
     // List files
     long fd = syscall1(SYS_OPEN, (long)current_path);
     file_count = 0;
+
+    // Entry for ".." (back)
+    if (strcmp(current_path, "/") != 0) {
+        strcpy(files[0].name, "..");
+        files[0].type = 2; // DIR
+        file_count = 1;
+    }
+
     if (fd >= 0) {
         int y_offset = 100;
-        while (syscall3(SYS_READDIR, fd, file_count, (long)&files[file_count]) == 0) {
+        int readdir_idx = 0;
+        while (syscall3(SYS_READDIR, fd, readdir_idx++, (long)&files[file_count]) == 0) {
+            // Skip "." and ".." if the filesystem provides them, as we handle them manually
+            if (strcmp(files[file_count].name, ".") == 0 || strcmp(files[file_count].name, "..") == 0) continue;
+
             // Icon
             msg.type = COMPOSER_DRAW_RECT;
             msg.data[0] = 60; msg.data[1] = y_offset - 5; msg.data[2] = 12; msg.data[3] = 12;
@@ -111,11 +123,21 @@ int main() {
                         printf("Explorer: Click en %s\n", files[file_index].name);
 
                         if (files[file_index].type == 2) { // Directory
-                            if (strcmp(current_path, "/") == 0) {
-                                sprintf(current_path, "/%s", files[file_index].name);
+                    if (strcmp(files[file_index].name, "..") == 0) {
+                        // Go back: Find last '/' and truncate
+                        char *last_slash = strrchr(current_path, '/');
+                        if (last_slash == current_path) {
+                            strcpy(current_path, "/");
+                        } else if (last_slash) {
+                            *last_slash = 0;
+                        }
                             } else {
-                                strcat(current_path, "/");
-                                strcat(current_path, files[file_index].name);
+                        if (strcmp(current_path, "/") == 0) {
+                            sprintf(current_path, "/%s", files[file_index].name);
+                        } else {
+                            strcat(current_path, "/");
+                            strcat(current_path, files[file_index].name);
+                        }
                             }
                             draw_explorer();
                         } else { // File

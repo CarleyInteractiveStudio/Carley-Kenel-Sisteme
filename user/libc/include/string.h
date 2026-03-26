@@ -11,6 +11,7 @@ int strncmp(const char *s1, const char *s2, size_t n);
 char *strcpy(char *dest, const char *src);
 char *strcat(char *dest, const char *src);
 char *strstr(const char *haystack, const char *needle);
+char *strrchr(const char *s, int c);
 size_t strlen(const char *s);
 
 #endif

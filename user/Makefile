@@ -14,7 +14,7 @@ LIBC_A := libc.a
 LIBC_SO := libc.so
 LD_SO := ldso.elf
 
-PROGS_STATIC := hello.elf shell.elf write.elf edit.elf gui.elf casm.elf crun.elf calc.elf play.elf game.elf clock.elf input.elf cpython.elf explorer.elf setup.elf code.elf shm_demo.elf about.elf term.elf
+PROGS_STATIC := hello.elf shell.elf write.elf edit.elf gui.elf casm.elf crun.elf calc.elf play.elf game.elf clock.elf input.elf cpython.elf explorer.elf setup.elf code.elf shm_demo.elf about.elf term.elf settings.elf
 PROGS_DYNAMIC := hello_dyn.elf dashboard.elf
 
 .PHONY: all clean
