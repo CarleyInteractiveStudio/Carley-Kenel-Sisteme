@@ -4,6 +4,7 @@
 extern "C" {
 #include <stdio.h>
 #include <string.h>
+#include <bmp.h>
 }
 
 /* Dashboard de Carley OS - Estilo "Burbuja de Cristal" (C++) */
@@ -35,10 +36,29 @@ public:
 
 class AppButton : public GlassWidget {
     char name[16];
+    uint32_t *icon_data;
+    uint32_t iw, ih;
+
 public:
-    AppButton(uint32_t _x, uint32_t _y, const char* _name)
-        : GlassWidget(_x, _y, 60, 60, 0x88FFFFFF), x_pos(_x), y_pos(_y) {
-        strncmp(name, _name, 15); // Fallback if strncpy missing, but we'll use a loop
+    AppButton(uint32_t _x, uint32_t _y, const char* _name, const char* icon_path = NULL)
+        : GlassWidget(_x, _y, 60, 60, 0x88FFFFFF), x_pos(_x), y_pos(_y), icon_data(NULL) {
+
+        if (icon_path) {
+            icon_data = bmp_load(icon_path, &iw, &ih);
+            if (icon_data) {
+                // Compartir memoria para el icono (Seguridad Microkernel)
+                long shm_id = shm_get(1000 + _x, iw * ih * 4);
+                uint32_t *shm_ptr = (uint32_t *)shm_at(shm_id, NULL);
+                for(uint32_t i=0; i<iw*ih; i++) shm_ptr[i] = icon_data[i];
+
+                ipc_msg_t m;
+                m.sender = 1001; m.type = 6; // LOAD_ICON
+                m.data[0] = iw; m.data[1] = ih; m.data[2] = shm_id;
+                syscall3(1, 1, (long)&m, 0);
+            }
+        }
+
+        strncmp(name, _name, 15);
         int i=0;
         for(; _name[i] && i < 15; i++) name[i] = _name[i];
         name[i] = 0;
@@ -47,6 +67,14 @@ public:
     void draw() override {
         // Fondo translúcido (Efecto cristal)
         GlassWidget::draw();
+
+        if (icon_data) {
+            ipc_msg_t m;
+            m.sender = 1001; m.type = 5; // DRAW_SPRITE
+            m.data[0] = x_pos + 10; m.data[1] = y_pos + 10;
+            m.data[2] = iw; m.data[3] = ih; m.data[4] = (uint64_t)icon_data;
+            syscall3(1, 1, (long)&m, 0);
+        }
 
         // Texto
         ipc_msg_t msg;
@@ -70,9 +98,15 @@ int main() {
     // "Burbuja de cristal" central (Dock)
     GlassWidget dock(250, 500, 300, 80, 0x66444444);
 
-    AppButton btn1(270, 510, "Game");
-    AppButton btn2(340, 510, "Code");
-    AppButton btn3(410, 510, "Settings");
+    AppButton btn1(270, 510, "Game", "/disk/game.bmp");
+    AppButton btn2(340, 510, "Code", "/disk/code.bmp");
+    AppButton btn3(410, 510, "Setup", "/disk/setup.bmp");
+
+    // Registrar ventana para recibir eventos
+    ipc_msg_t m;
+    m.sender = 1001; m.type = 10; // CREATE_WINDOW
+    m.data[0] = 250; m.data[1] = 500; m.data[2] = 300; m.data[3] = 80;
+    syscall3(1, 1, (long)&m, 0);
 
     while (1) {
         dock.draw();
@@ -80,10 +114,18 @@ int main() {
         btn2.draw();
         btn3.draw();
 
+        ipc_msg_t event;
+        if (ipc_recv(&event) == 0) {
+            if (event.type == 21) { // WM_CLICK
+                uint32_t click_x = event.data[0];
+                if (click_x > 20 && click_x < 80) syscall1(10, (long)"game.elf");
+                else if (click_x > 90 && click_x < 150) syscall1(10, (long)"code.elf");
+                else if (click_x > 160 && click_x < 220) syscall1(10, (long)"setup.elf");
+            }
+        }
+
         // Ceder CPU
         __asm__ volatile("int $0x80" : : "a"(0));
-        // Pequeño delay
-        for(int i=0; i<1000000; i++) __asm__("pause");
     }
 
     return 0;

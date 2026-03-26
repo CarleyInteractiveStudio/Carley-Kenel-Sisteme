@@ -7,6 +7,7 @@
 
 static wm_window_t windows[MAX_WINDOWS];
 static int window_count = 0;
+static uint32_t mouse_x = 400, mouse_y = 300, mouse_btn = 0;
 
 #define MAX_ICONS 32
 typedef struct {
@@ -31,6 +32,8 @@ static void draw_sprite(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint32_t
 
 static void wm_redraw_all() {
     video_clear(0x1E1E1E);
+
+    // 1. Dibujar Ventanas
     for (int i = 0; i < window_count; i++) {
         if (windows[i].active) {
             // Marco de la ventana (Estilo Apple Glass)
@@ -46,6 +49,10 @@ static void wm_redraw_all() {
             }
         }
     }
+
+    // 2. Dibujar Cursor (Flecha simple o cruz)
+    video_draw_rect(mouse_x, mouse_y, 8, 2, 0xFFFFFF);
+    video_draw_rect(mouse_x + 3, mouse_y - 3, 2, 8, 0xFFFFFF);
 }
 
 void composer_task(void) {
@@ -70,11 +77,12 @@ void composer_task(void) {
                     draw_sprite((uint32_t)msg.data[0], (uint32_t)msg.data[1], (uint32_t)msg.data[2], (uint32_t)msg.data[3], (uint32_t *)msg.data[4]);
                     break;
                 case COMPOSER_LOAD_ICON: {
+                    /* data[2]=shm_id */
                     for (int i = 0; i < MAX_ICONS; i++) {
                         if (!icons[i].used) {
                             icons[i].w = (uint32_t)msg.data[0];
                             icons[i].h = (uint32_t)msg.data[1];
-                            icons[i].data = (uint32_t *)msg.data[2];
+                            icons[i].data = (uint32_t *)shm_at(msg.data[2], 0);
                             icons[i].used = true;
                             break;
                         }
@@ -92,6 +100,32 @@ void composer_task(void) {
                         window_count++;
                         wm_redraw_all();
                     }
+                    break;
+                case 20: // MOUSE_EVENT
+                    mouse_x = (uint32_t)msg.data[0];
+                    mouse_y = (uint32_t)msg.data[1];
+                    mouse_btn = (uint32_t)msg.data[2];
+
+                    if (mouse_btn) {
+                        /* Detectar clics en ventanas */
+                        for (int i = window_count - 1; i >= 0; i--) {
+                            if (windows[i].active &&
+                                mouse_x >= windows[i].x && mouse_x <= windows[i].x + windows[i].w &&
+                                mouse_y >= windows[i].y && mouse_y <= windows[i].y + windows[i].h) {
+
+                                /* Enviar evento de clic a la aplicación dueña */
+                                ipc_msg_t m;
+                                m.sender = 1; // From Composer
+                                m.type = 21;  // WM_CLICK
+                                m.data[0] = mouse_x - windows[i].x;
+                                m.data[1] = mouse_y - windows[i].y;
+                                ipc_send(windows[i].owner_id, &m);
+                                break;
+                            }
+                        }
+                    }
+
+                    wm_redraw_all();
                     break;
                 case COMPOSER_ATTACH_SHM: {
                     for (int i = 0; i < window_count; i++) {

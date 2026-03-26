@@ -69,19 +69,22 @@ void mouse_handler(void) {
         if (mouse_byte[0] & 0x10) rel_x |= 0xFFFFFF00;
         if (mouse_byte[0] & 0x20) rel_y |= 0xFFFFFF00;
 
-        /* Borrar cursor anterior */
-        video_draw_rect(mouse_x, mouse_y, 4, 4, 0x1E1E1E);
-
         mouse_x += rel_x;
         mouse_y -= rel_y; // Eje Y invertido en PS/2
 
-        /* Limites de pantalla */
+        /* Limites de pantalla (800x600 asumiendo resolucion estandar) */
         if (mouse_x < 0) mouse_x = 0;
         if (mouse_y < 0) mouse_y = 0;
-        if (mouse_x > 635) mouse_x = 635;
-        if (mouse_y > 475) mouse_y = 475;
+        if (mouse_x > 790) mouse_x = 790;
+        if (mouse_y > 590) mouse_y = 590;
 
-        /* Dibujar nuevo cursor (un pequeño cuadrado blanco) */
-        video_draw_rect(mouse_x, mouse_y, 4, 4, 0xFFFFFF);
+        /* Enviar evento al Composer (ID 1) */
+        ipc_msg_t msg;
+        msg.sender = 502; // Mouse driver ID
+        msg.type = 20;    // MOUSE_EVENT
+        msg.data[0] = (uint32_t)mouse_x;
+        msg.data[1] = (uint32_t)mouse_y;
+        msg.data[2] = (mouse_byte[0] & 1); // Botón izquierdo
+        ipc_send(1, &msg);
     }
 }

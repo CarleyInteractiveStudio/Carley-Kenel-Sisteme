@@ -9,7 +9,7 @@ CXXFLAGS := -Wall -Wextra -std=c++11 -ffreestanding -fno-stack-protector -fno-ex
 LDFLAGS_STATIC := -nostdlib -static
 LDFLAGS_DYNAMIC := -nostdlib -shared
 
-LIBC_OBJ := libc/string.o libc/stdio.o libc/stdlib.o libc/time.o libc/math.o libc/arch/x86_64/crt0.o libc/arch/x86_64/syscall.o libc/cpp_runtime.o
+LIBC_OBJ := libc/string.o libc/stdio.o libc/stdlib.o libc/time.o libc/math.o libc/arch/x86_64/crt0.o libc/arch/x86_64/syscall.o libc/cpp_runtime.o libc/bmp.o
 LIBC_A := libc.a
 LIBC_SO := libc.so
 LD_SO := ldso.elf
