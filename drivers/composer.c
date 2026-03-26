@@ -36,9 +36,11 @@ static void wm_redraw_all() {
     // 1. Dibujar Ventanas
     for (int i = 0; i < window_count; i++) {
         if (windows[i].active) {
-            // Marco de la ventana (Estilo Apple Glass)
-            video_draw_rect(windows[i].x, windows[i].y, windows[i].w, windows[i].h, 0x88333333);
-            video_draw_rect(windows[i].x, windows[i].y, windows[i].w, 20, 0xCC555555); // Barra de titulo
+            // Sombra
+            video_draw_shadow(windows[i].x, windows[i].y, windows[i].w, windows[i].h, 12);
+            // Marco de la ventana (Estilo Apple Glass con bordes redondeados)
+            video_draw_rounded_rect(windows[i].x, windows[i].y, windows[i].w, windows[i].h, 12, 0x99222222);
+            video_draw_rounded_rect(windows[i].x, windows[i].y, windows[i].w, 24, 12, 0xDD444444); // Barra de titulo
 
             if (windows[i].shm_buffer) {
                 for (uint32_t hh=0; hh < windows[i].h - 20; hh++) {
