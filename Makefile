@@ -37,16 +37,29 @@ iso: $(KERNEL) userland
 	cp user/*.elf iso_root/boot/
 	cp user/*.so iso_root/boot/
 
+	# Copiar binarios de Limine (asumiendo que están en ./limine/)
+	@if [ -d "limine" ]; then \
+		cp limine/limine-bios.sys iso_root/boot/ ; \
+		cp limine/limine-bios-cd.bin iso_root/boot/ ; \
+		cp limine/limine-uefi-cd.bin iso_root/boot/ ; \
+	fi
+
 	# Verificar si xorriso está instalado para generar la ISO real
 	@if command -v xorriso > /dev/null; then \
-		xorriso -as mkisofs -b boot/limine-bios-cd.bin \
-			-no-emul-boot -boot-load-size 4 -boot-info-table \
-			--efi-boot boot/limine-uefi-cd.bin \
-			-efi-boot-part --efi-boot-image --protective-msdos-label \
-			iso_root -o carley-os.iso; \
-		echo "¡ÉXITO! carley-os.iso generado para VirtualBox."; \
+		if [ -f "iso_root/boot/limine-bios-cd.bin" ]; then \
+			xorriso -as mkisofs -b boot/limine-bios-cd.bin \
+				-no-emul-boot -boot-load-size 4 -boot-info-table \
+				--efi-boot boot/limine-uefi-cd.bin \
+				-efi-boot-part --efi-boot-image --protective-msdos-label \
+				iso_root -o carley-os.iso && \
+			echo "¡ÉXITO! carley-os.iso generado para VirtualBox."; \
+		else \
+			echo "ERROR: No se encuentran los archivos de Limine en ./limine/. Ejecuta: git clone https://github.com/limine-bootloader/limine.git --branch=v7.x-binary --depth=1"; \
+			exit 1; \
+		fi \
 	else \
 		echo "ERROR: xorriso no detectado. Instálalo con 'sudo apt install xorriso'."; \
+		exit 1; \
 	fi
 
 	dd if=/dev/zero of=carley-disk.img bs=1M count=10
