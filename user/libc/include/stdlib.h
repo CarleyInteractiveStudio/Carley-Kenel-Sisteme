@@ -15,4 +15,7 @@ int atoi(const char *nptr);
 int mkdir(const char *path);
 int mkfile(const char *path, uint32_t size);
 
+long shm_get(uint64_t id, size_t size);
+void *shm_at(long shm_id, void *addr);
+
 #endif

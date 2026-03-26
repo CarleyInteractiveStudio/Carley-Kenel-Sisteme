@@ -87,3 +87,11 @@ int mkdir(const char *path) {
 int mkfile(const char *path, uint32_t size) {
     return (int)syscall2(SYS_CREATE, (long)path, (long)size);
 }
+
+long shm_get(uint64_t id, size_t size) {
+    return syscall2(19, (long)id, (long)size);
+}
+
+void *shm_at(long shm_id, void *addr) {
+    return (void *)syscall2(20, shm_id, (long)addr);
+}

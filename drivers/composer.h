@@ -13,10 +13,12 @@
 #define COMPOSER_LOAD_ICON   6
 #define COMPOSER_CREATE_WINDOW 10
 #define COMPOSER_MOVE_WINDOW   11
+#define COMPOSER_ATTACH_SHM    12
 
 typedef struct {
     uint32_t x, y, w, h;
     uint32_t owner_id;
+    uint32_t *shm_buffer;
     bool active;
 } wm_window_t;
 

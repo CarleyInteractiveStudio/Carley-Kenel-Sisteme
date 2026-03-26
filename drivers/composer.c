@@ -2,6 +2,7 @@
 #include "video.h"
 #include "kernel/sched.h"
 #include "kernel/ipc.h"
+#include "kernel/shm.h"
 #include <stdbool.h>
 
 static wm_window_t windows[MAX_WINDOWS];
@@ -35,6 +36,14 @@ static void wm_redraw_all() {
             // Marco de la ventana (Estilo Apple Glass)
             video_draw_rect(windows[i].x, windows[i].y, windows[i].w, windows[i].h, 0x88333333);
             video_draw_rect(windows[i].x, windows[i].y, windows[i].w, 20, 0xCC555555); // Barra de titulo
+
+            if (windows[i].shm_buffer) {
+                for (uint32_t hh=0; hh < windows[i].h - 20; hh++) {
+                    for (uint32_t ww=0; ww < windows[i].w; ww++) {
+                        video_put_pixel(windows[i].x + ww, windows[i].y + 20 + hh, windows[i].shm_buffer[hh * windows[i].w + ww]);
+                    }
+                }
+            }
         }
     }
 }
@@ -84,6 +93,15 @@ void composer_task(void) {
                         wm_redraw_all();
                     }
                     break;
+                case COMPOSER_ATTACH_SHM: {
+                    for (int i = 0; i < window_count; i++) {
+                        if (windows[i].owner_id == msg.sender) {
+                            windows[i].shm_buffer = (uint32_t *)shm_at(msg.data[0], 0);
+                            break;
+                        }
+                    }
+                    break;
+                }
             }
         }
         sched_yield();

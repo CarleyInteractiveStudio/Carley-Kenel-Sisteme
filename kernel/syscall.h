@@ -22,6 +22,8 @@
 #define SYS_IOPL       15
 #define SYS_CREATE     17
 #define SYS_MKDIR      18
+#define SYS_SHM_GET    19
+#define SYS_SHM_AT     20
 
 void syscall_init(void);
 context_t *syscall_handler(context_t *ctx);

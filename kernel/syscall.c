@@ -10,6 +10,7 @@
 #include "vmm.h"
 #include "elf.h"
 #include "cpu.h"
+#include "shm.h"
 
 context_t *syscall_handler(context_t *ctx) {
     uint64_t sys_no = ctx->rax;
@@ -115,6 +116,9 @@ context_t *syscall_handler(context_t *ctx) {
         case SYS_MKDIR:
             if (!(sched_get_current_task()->capabilities & CAP_DISK)) { ctx->rax = -1; break; }
             ctx->rax = vfs_mkdir((const char *)ctx->rdi); break;
+
+        case SYS_SHM_GET: ctx->rax = shm_get(ctx->rdi, (size_t)ctx->rsi); break;
+        case SYS_SHM_AT: ctx->rax = (uintptr_t)shm_at(ctx->rdi, ctx->rsi); break;
 
         default: ctx->rax = -1; break;
     }
