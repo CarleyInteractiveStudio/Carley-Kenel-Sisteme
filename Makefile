@@ -14,7 +14,7 @@ C_SOURCES := $(shell find kernel -name '*.c') $(shell find common -name '*.c') $
 S_SOURCES := $(shell find kernel -name '*.s')
 OBJ := $(C_SOURCES:.c=.o) $(S_SOURCES:.s=.o)
 
-.PHONY: all clean iso userland
+.PHONY: all clean iso userland setup
 
 all: $(KERNEL) userland
 
@@ -64,6 +64,13 @@ iso: $(KERNEL) userland
 
 	dd if=/dev/zero of=carley-disk.img bs=1M count=10
 
+setup:
+	@echo "Configurando entorno de arranque..."
+	rm -rf limine
+	git clone https://github.com/limine-bootloader/limine.git --branch=v7.x-binary --depth=1
+	$(MAKE) -C limine
+	@echo "Entorno listo. Ya puedes ejecutar 'make iso'."
+
 clean:
-	rm -rf $(OBJ) $(KERNEL) carley-kernel.iso iso_root carley-disk.img
+	rm -rf $(OBJ) $(KERNEL) carley-kernel.iso carley-os.iso iso_root carley-disk.img
 	$(MAKE) -C user clean
