@@ -33,6 +33,8 @@ static void draw_sprite(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint32_t
     }
 }
 
+static void wm_redraw_all();
+
 static void wm_bring_to_front(int index) {
     if (index < 0 || index >= window_count - 1) return;
     wm_window_t tmp = windows[index];
@@ -40,6 +42,24 @@ static void wm_bring_to_front(int index) {
         windows[i] = windows[i + 1];
     }
     windows[window_count - 1] = tmp;
+}
+
+static void wm_animate_step() {
+    bool needed = false;
+    for (int i = 0; i < window_count; i++) {
+        if (windows[i].active && windows[i].animating) {
+            if (windows[i].w < windows[i].target_w) windows[i].w += (windows[i].target_w - windows[i].w) / 4 + 1;
+            if (windows[i].h < windows[i].target_h) windows[i].h += (windows[i].target_h - windows[i].h) / 4 + 1;
+
+            if (windows[i].w >= windows[i].target_w && windows[i].h >= windows[i].target_h) {
+                windows[i].w = windows[i].target_w;
+                windows[i].h = windows[i].target_h;
+                windows[i].animating = false;
+            }
+            needed = true;
+        }
+    }
+    if (needed) wm_redraw_all();
 }
 
 static void wm_redraw_all() {
@@ -87,6 +107,7 @@ void composer_task(void) {
 
     for (;;) {
         if (ipc_recv(&msg) == 0) {
+            wm_animate_step();
             switch (msg.type) {
                 case COMPOSER_DRAW_PIXEL:
                     video_put_pixel((uint32_t)msg.data[0], (uint32_t)msg.data[1], (uint32_t)msg.data[2]);
@@ -124,10 +145,14 @@ void composer_task(void) {
                     if (window_count < MAX_WINDOWS) {
                         windows[window_count].x = (uint32_t)msg.data[0];
                         windows[window_count].y = (uint32_t)msg.data[1];
-                        windows[window_count].w = (uint32_t)msg.data[2];
-                        windows[window_count].h = (uint32_t)msg.data[3];
+                        windows[window_count].target_w = (uint32_t)msg.data[2];
+                        windows[window_count].target_h = (uint32_t)msg.data[3];
+                        // Start small for animation
+                        windows[window_count].w = 20;
+                        windows[window_count].h = 20;
                         windows[window_count].owner_id = msg.sender;
                         windows[window_count].active = true;
+                        windows[window_count].animating = true;
                         window_count++;
                         wm_redraw_all();
                     }
@@ -170,6 +195,20 @@ void composer_task(void) {
                         windows[drag_win_idx].x = mouse_x - drag_off_x;
                         windows[drag_win_idx].y = mouse_y - drag_off_y;
                     } else if (!mouse_btn) {
+                        /* Snapping (Magnet) al soltar */
+                        if (drag_win_idx != -1) {
+                            if (mouse_x < 50) {
+                                // Snap Izquierda
+                                windows[drag_win_idx].x = 0; windows[drag_win_idx].y = 0;
+                                windows[drag_win_idx].target_w = 400; windows[drag_win_idx].target_h = 600;
+                                windows[drag_win_idx].animating = true;
+                            } else if (mouse_x > 750) {
+                                // Snap Derecha
+                                windows[drag_win_idx].x = 400; windows[drag_win_idx].y = 0;
+                                windows[drag_win_idx].target_w = 400; windows[drag_win_idx].target_h = 600;
+                                windows[drag_win_idx].animating = true;
+                            }
+                        }
                         drag_win_idx = -1;
                     }
 

@@ -44,6 +44,7 @@ bool notifications_open = false;
 bool settings_open = false;
 
 char dynamic_notif[64] = "1. Welcome to Carley!";
+char search_query[32] = "";
 
 void draw_dashboard() {
     ipc_msg_t msg;
@@ -125,9 +126,27 @@ void draw_dashboard() {
         msg.data[4] = 0xEE111111;
         syscall3(SYS_IPC_SEND, 1, (long)&msg, 0);
 
+        // Draw Search Bar
+        msg.data[0] = 250; msg.data[1] = 70; msg.data[2] = 300; msg.data[3] = 30;
+        msg.data[4] = 0xFF333333;
+        syscall3(SYS_IPC_SEND, 1, (long)&msg, 0);
+
+        msg.type = COMPOSER_DRAW_CHAR;
+        msg.data[1] = 260; msg.data[2] = 78; msg.data[3] = 0xAAAAAA;
+        const char *s_text = strlen(search_query) > 0 ? search_query : "Search apps...";
+        for(int j=0; s_text[j]; j++) {
+            msg.data[0] = s_text[j];
+            syscall3(SYS_IPC_SEND, 1, (long)&msg, 0);
+            msg.data[1] += 8;
+        }
+        msg.type = COMPOSER_DRAW_RECT;
+
         // Draw Apps
+        int shown_count = 0;
         for (int i = 0; i < 6; i++) {
-            int x = 100 + (i % 3) * 200;
+            if (strlen(search_query) > 0 && strstr(apps[i].name, search_query) == NULL) continue;
+
+            int x = 100 + (shown_count % 3) * 200;
             int y = 100 + (i / 3) * 150;
 
             // Icon
@@ -144,6 +163,7 @@ void draw_dashboard() {
                 msg.data[1] += 8;
             }
             msg.type = COMPOSER_DRAW_RECT;
+            shown_count++;
         }
     }
 }
@@ -161,7 +181,19 @@ int main() {
     while(1) {
         ipc_msg_t rmsg;
         if (syscall3(SYS_IPC_RECV, 0, (long)&rmsg, 0) == 0) {
-            if (rmsg.type == 50) { // NEW_NOTIFICATION
+            if (rmsg.type == 22) { // KEYBOARD_EVENT
+                if (menu_open) {
+                    char c = (char)rmsg.data[0];
+                    if (c == '\b') {
+                        if (strlen(search_query) > 0) search_query[strlen(search_query)-1] = 0;
+                    } else if (strlen(search_query) < 31 && c >= 32) {
+                        int l = strlen(search_query);
+                        search_query[l] = c;
+                        search_query[l+1] = 0;
+                    }
+                    draw_dashboard();
+                }
+            } else if (rmsg.type == 50) { // NEW_NOTIFICATION
                 strncpy(dynamic_notif, (char*)rmsg.data, 63);
                 dynamic_notif[63] = 0;
                 draw_dashboard();
