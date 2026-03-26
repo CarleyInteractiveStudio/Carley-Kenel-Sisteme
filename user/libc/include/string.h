@@ -9,6 +9,8 @@ int memcmp(const void *s1, const void *s2, size_t n);
 int strcmp(const char *s1, const char *s2);
 int strncmp(const char *s1, const char *s2, size_t n);
 char *strcpy(char *dest, const char *src);
+char *strcat(char *dest, const char *src);
+char *strstr(const char *haystack, const char *needle);
 size_t strlen(const char *s);
 
 #endif

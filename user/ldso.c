@@ -79,26 +79,20 @@ extern void *mmap(void *addr, size_t length, int prot, int flags, int fd, uint32
 #define SYS_MMAP 14
 
 static void *ld_load_library(const char *name) {
-    FILE *f = fopen(name, "rb");
-    if (!f) return NULL;
+    // Intentamos abrir la librería desde el VFS
+    // SYS_OPEN = 3
+    long fd = syscall1(3, (long)name);
+    if (fd < 0) return NULL;
 
-    // Obtenemos el tamaño (truco con vfs_node si FILE lo tiene expuesto,
-    // pero LibC fopen nos da un stream. En este sistema FILE tiene vfs_node)
-    // Para el prototipo, asumimos un tamaño o leemos el header.
-    uint8_t header[64];
-    fread(header, 1, 64, f);
-    Elf64_Ehdr *eh = (Elf64_Ehdr *)header;
+    // Reservar memoria fija para libc.so (prototipo)
+    void *lib_base = (void *)0x800000;
+    // SYS_MMAP = 14
+    syscall3(14, (long)lib_base, 128 * 1024, 0); // 128KB de reserva
 
-    // Mapear la librería.
-    // En este sistema mmap(addr, len) simplemente reserva memoria.
-    void *lib_base = (void *)0x800000; // Dirección fija para libc.so en el prototipo mejorado
-    syscall3(SYS_MMAP, (long)lib_base, eh->e_phnum * 4096, 0); // Reserva simplificada
-
-    // Cargar segmentos LOAD
-    // (Simplificado: leemos todo el archivo a la base por ahora)
-    fseek(f, 0, SEEK_SET);
-    fread(lib_base, 1, 0x10000, f); // Leer hasta 64KB de la lib
-    fclose(f);
+    // SYS_READ = 4
+    syscall3(4, fd, (long)lib_base, 128 * 1024);
+    // SYS_CLOSE = 5
+    syscall1(5, fd);
 
     return lib_base;
 }
@@ -193,6 +187,7 @@ void ld_main(int argc, char **argv, uint64_t app_entry) {
     void (*entry)(int, char **) = (void (*)(int, char **))app_entry;
     entry(argc, argv);
 
-    /* Si el programa retorna, salimos */
-    exit(0);
+    /* Si el programa retorna, salimos via SYS_EXIT (8) */
+    syscall1(8, 0);
+    while(1);
 }
