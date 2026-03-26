@@ -9,12 +9,12 @@ CXXFLAGS := -Wall -Wextra -std=c++11 -ffreestanding -fno-stack-protector -fno-ex
 LDFLAGS_STATIC := -nostdlib -static
 LDFLAGS_DYNAMIC := -nostdlib -shared
 
-LIBC_OBJ := libc/string.o libc/stdio.o libc/stdlib.o libc/time.o libc/math.o libc/arch/x86_64/crt0.o libc/arch/x86_64/syscall.o libc/cpp_runtime.o libc/bmp.o
+LIBC_OBJ := libc/string.o libc/stdio.o libc/stdlib.o libc/time.o libc/math.o libc/arch/x86_64/crt0.o libc/arch/x86_64/syscall.o libc/cpp_runtime.o libc/bmp.o libc/gui.o
 LIBC_A := libc.a
 LIBC_SO := libc.so
 LD_SO := ldso.elf
 
-PROGS_STATIC := hello.elf shell.elf write.elf edit.elf gui.elf casm.elf crun.elf calc.elf play.elf game.elf clock.elf input.elf cpython.elf explorer.elf setup.elf code.elf shm_demo.elf about.elf term.elf settings.elf shell_gui.elf
+PROGS_STATIC := hello.elf shell.elf write.elf edit.elf gui.elf casm.elf crun.elf calc_gui.elf play.elf game.elf clock.elf input.elf cpython.elf explorer.elf setup.elf code.elf shm_demo.elf about.elf term.elf settings.elf shell_gui.elf
 PROGS_DYNAMIC := hello_dyn.elf dashboard.elf
 
 .PHONY: all clean
@@ -29,6 +29,9 @@ $(LIBC_SO): $(LIBC_OBJ)
 
 $(LD_SO): ldso.o ldso_crt0.o $(LIBC_A)
 	$(CC) $(LDFLAGS_STATIC) -T ldso.ld ldso_crt0.o ldso.o $(LIBC_A) -o $@
+
+calc_gui.elf: calc.o $(LIBC_A)
+	$(CXX) $(LDFLAGS_STATIC) -T linker.ld calc.o $(LIBC_A) -o $@
 
 %.elf: %.o $(LIBC_A)
 	$(CC) $(LDFLAGS_STATIC) -T linker.ld $< $(LIBC_A) -o $@
