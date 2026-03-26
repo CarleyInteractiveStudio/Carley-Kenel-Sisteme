@@ -43,11 +43,11 @@ make -C limine
    ```bash
    make iso
    ```
-   Esto generará un archivo `carley-kernel.iso` listo para ser usado en QEMU o VirtualBox.
+   Esto generará un archivo `carley-os.iso` listo para ser usado en QEMU o VirtualBox.
 
 3. **Ejecutar en QEMU (Recomendado):**
    ```bash
-   qemu-system-x86_64 -cdrom carley-kernel.iso -m 512M -smp 4
+   qemu-system-x86_64 -cdrom carley-os.iso -m 512M -smp 4
    ```
 
 ## Solución de Problemas

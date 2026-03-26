@@ -56,7 +56,7 @@ iso: $(KERNEL) userland
 				iso_root -o carley-os.iso && \
 			echo "¡ÉXITO! carley-os.iso generado para VirtualBox."; \
 		else \
-			echo "ERROR: No se encuentran los archivos de Limine en ./limine/. Ejecuta: git clone https://github.com/limine-bootloader/limine.git --branch=v7.x-binary --depth=1"; \
+			echo "ERROR: No se encuentran los archivos de Limine en ./limine/. Ejecuta: 'make setup'"; \
 			exit 1; \
 		fi \
 	else \
