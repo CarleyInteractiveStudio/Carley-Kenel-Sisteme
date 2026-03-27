@@ -32,10 +32,13 @@ userland:
 	$(CC) $(CFLAGS) -c $< -o $@
 
 iso: $(KERNEL) userland
+	rm -rf iso_root
 	mkdir -p iso_root/boot/limine
+	mkdir -p iso_root/limine
 	cp $(KERNEL) iso_root/boot/
-	# Colocar limine.conf en la raiz Y en /boot/limine para maxima compatibilidad
+	# Colocar limine.conf en la raiz, /limine y /boot/limine para maxima compatibilidad
 	cp limine.conf iso_root/
+	cp limine.conf iso_root/limine/
 	cp limine.conf iso_root/boot/limine/
 	cp user/*.elf iso_root/boot/
 	cp user/*.so iso_root/boot/
@@ -45,6 +48,7 @@ iso: $(KERNEL) userland
 	# Copiar binarios de Limine (asumiendo que están en ./limine/)
 	@if [ -d "limine" ]; then \
 		cp limine/limine-bios.sys iso_root/boot/limine/ ; \
+		cp limine/limine-bios.sys iso_root/limine/ ; \
 		cp limine/limine-bios-cd.bin iso_root/boot/limine/ ; \
 		cp limine/limine-uefi-cd.bin iso_root/boot/limine/ ; \
 	fi
