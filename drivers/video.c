@@ -95,11 +95,19 @@ void video_scroll(void) {
 }
 
 void video_draw_char(char c, uint32_t x, uint32_t y, uint32_t color) {
-    if (c < 0 || c > 127) return;
-    for (int i = 0; i < 8; i++)
-        for (int j = 0; j < 8; j++)
-            if (font8x8_basic[(int)c][i] & (1 << (7 - j)))
-                video_put_pixel(x + j, y + i, color);
+    video_draw_char_ex(c, x, y, color, 1);
+}
+
+void video_draw_char_ex(char c, uint32_t x, uint32_t y, uint32_t color, uint32_t scale) {
+    if (c < 0 || (uint32_t)c > 127) return;
+    for (int i = 0; i < 8; i++) {
+        for (int j = 0; j < 8; j++) {
+            if (font8x8_basic[(int)c][i] & (1 << (7 - j))) {
+                if (scale == 1) video_put_pixel(x + j, y + i, color);
+                else video_draw_rect(x + j * scale, y + i * scale, scale, scale, color);
+            }
+        }
+    }
 }
 
 void video_terminal_write(char c, uint32_t color) {
@@ -112,4 +120,21 @@ void video_terminal_write(char c, uint32_t color) {
 
 void video_draw_string(const char *str, uint32_t x, uint32_t y, uint32_t color) {
     while (*str) { video_draw_char(*str++, x, y, color); x += CHAR_WIDTH; }
+}
+
+void video_draw_rounded_rect(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint32_t r, uint32_t color) {
+    for (uint32_t i = y; i < y + h; i++) {
+        for (uint32_t j = x; j < x + w; j++) {
+            uint32_t dx = (j < x + r) ? (x + r - j) : ((j >= x + w - r) ? (j - (x + w - r) + 1) : 0);
+            uint32_t dy = (i < y + r) ? (y + r - i) : ((i >= y + h - r) ? (i - (y + h - r) + 1) : 0);
+
+            if (dx && dy && (dx * dx + dy * dy > r * r)) continue;
+            video_put_pixel_alpha(j, i, color);
+        }
+    }
+}
+
+void video_draw_shadow(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint32_t r) {
+    // Sombra muy simple, un rectangulo negro con baja opacidad
+    video_draw_rounded_rect(x + 5, y + 5, w, h, r, 0x44000000);
 }

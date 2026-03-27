@@ -48,6 +48,46 @@ char *strcpy(char *dest, const char *src) {
     return dest;
 }
 
+char *strncpy(char *dest, const char *src, size_t n) {
+    size_t i;
+    for (i = 0; i < n && src[i] != '\0'; i++)
+        dest[i] = src[i];
+    for ( ; i < n; i++)
+        dest[i] = '\0';
+    return dest;
+}
+
+char *strcat(char *dest, const char *src) {
+    char *d = dest;
+    while (*d) d++;
+    while ((*d++ = *src++));
+    return dest;
+}
+
+char *strstr(const char *haystack, const char *needle) {
+    if (!*needle) return (char *)haystack;
+    for (; *haystack; haystack++) {
+        if (*haystack == *needle) {
+            const char *h = haystack;
+            const char *n = needle;
+            while (*h && *n && *h == *n) {
+                h++;
+                n++;
+            }
+            if (!*n) return (char *)haystack;
+        }
+    }
+    return NULL;
+}
+
+char *strrchr(const char *s, int c) {
+    const char *last = NULL;
+    do {
+        if (*s == (char)c) last = s;
+    } while (*s++);
+    return (char *)last;
+}
+
 size_t strlen(const char *s) {
     size_t len = 0;
     while (*s++) len++;

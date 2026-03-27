@@ -17,9 +17,11 @@
 
 typedef struct {
     uint32_t x, y, w, h;
+    uint32_t target_w, target_h; // For animations
     uint32_t owner_id;
     uint32_t *shm_buffer;
     bool active;
+    bool animating;
 } wm_window_t;
 
 #define MAX_WINDOWS 16

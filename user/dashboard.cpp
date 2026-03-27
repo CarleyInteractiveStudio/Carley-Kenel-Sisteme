@@ -13,7 +13,11 @@ extern "C" {
 #define COMPOSER_DRAW_CHAR  3
 #define COMPOSER_DRAW_SPRITE 5
 
+extern "C" long syscall1(int num, long arg1);
 extern "C" long syscall3(int num, long arg1, long arg2, long arg3);
+extern "C" long shm_get(uint64_t id, size_t size);
+extern "C" void *shm_at(uint64_t shm_id, uintptr_t hint);
+#define SYS_IPC_RECV 2
 
 class GlassWidget {
 protected:
@@ -115,7 +119,7 @@ int main() {
         btn3.draw();
 
         ipc_msg_t event;
-        if (ipc_recv(&event) == 0) {
+        if (syscall3(SYS_IPC_RECV, 0, (long)&event, 0) == 0) {
             if (event.type == 21) { // WM_CLICK
                 uint32_t click_x = event.data[0];
                 if (click_x > 20 && click_x < 80) syscall1(10, (long)"game.elf");

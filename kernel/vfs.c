@@ -60,10 +60,11 @@ vfs_node_t *vfs_open(const char *path) {
 
         if (strcmp(part, ".") == 0) { /* Ignorar */ }
         else if (strcmp(part, "..") == 0) {
-            /* No soportado aún de forma genérica sin puntero 'parent' */
+            if (curr->parent) curr = curr->parent;
         } else if (curr->ops && curr->ops->finddir) {
             vfs_node_t *next = curr->ops->finddir(curr, part);
             if (!next) { spin_unlock(&vfs_lock); return NULL; }
+            next->parent = curr; // Establecer padre dinámicamente
             curr = next;
         } else {
             spin_unlock(&vfs_lock); return NULL;
