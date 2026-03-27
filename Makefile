@@ -33,7 +33,7 @@ userland:
 iso: $(KERNEL) userland
 	mkdir -p iso_root/boot
 	cp $(KERNEL) iso_root/boot/
-	cp limine.conf iso_root/boot/
+	cp limine.conf iso_root/
 	cp user/*.elf iso_root/boot/
 	cp user/*.so iso_root/boot/
 	# Tambien copiar archivos de script/datos si existen
