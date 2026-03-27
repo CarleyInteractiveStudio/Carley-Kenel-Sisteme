@@ -32,9 +32,11 @@ userland:
 	$(CC) $(CFLAGS) -c $< -o $@
 
 iso: $(KERNEL) userland
-	mkdir -p iso_root/boot
+	mkdir -p iso_root/boot/limine
 	cp $(KERNEL) iso_root/boot/
+	# Colocar limine.conf en la raiz Y en /boot/limine para maxima compatibilidad
 	cp limine.conf iso_root/
+	cp limine.conf iso_root/boot/limine/
 	cp user/*.elf iso_root/boot/
 	cp user/*.so iso_root/boot/
 	# Tambien copiar archivos de script/datos si existen
@@ -42,17 +44,17 @@ iso: $(KERNEL) userland
 
 	# Copiar binarios de Limine (asumiendo que están en ./limine/)
 	@if [ -d "limine" ]; then \
-		cp limine/limine-bios.sys iso_root/boot/ ; \
-		cp limine/limine-bios-cd.bin iso_root/boot/ ; \
-		cp limine/limine-uefi-cd.bin iso_root/boot/ ; \
+		cp limine/limine-bios.sys iso_root/boot/limine/ ; \
+		cp limine/limine-bios-cd.bin iso_root/boot/limine/ ; \
+		cp limine/limine-uefi-cd.bin iso_root/boot/limine/ ; \
 	fi
 
 	# Verificar si xorriso está instalado para generar la ISO real
 	@if command -v xorriso > /dev/null; then \
-		if [ -f "iso_root/boot/limine-bios-cd.bin" ]; then \
-			xorriso -as mkisofs -b boot/limine-bios-cd.bin \
+		if [ -f "iso_root/boot/limine/limine-bios-cd.bin" ]; then \
+			xorriso -as mkisofs -b boot/limine/limine-bios-cd.bin \
 				-no-emul-boot -boot-load-size 4 -boot-info-table \
-				--efi-boot boot/limine-uefi-cd.bin \
+				--efi-boot boot/limine/limine-uefi-cd.bin \
 				-efi-boot-part --efi-boot-image --protective-msdos-label \
 				iso_root -o carley-os.iso && \
 			echo "¡ÉXITO! carley-os.iso generado para VirtualBox."; \
