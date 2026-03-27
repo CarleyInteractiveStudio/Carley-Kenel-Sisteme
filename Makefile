@@ -1,6 +1,7 @@
 # Configuración del Compilador
-CC := gcc
-LD := ld
+# Puedes sobrescribir estas variables para compilación cruzada
+CC ?= gcc
+LD ?= ld
 
 KERNEL := kernel.elf
 
