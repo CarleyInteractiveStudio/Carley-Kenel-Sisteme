@@ -53,5 +53,15 @@ Puedes copiar `carley-os.iso` a un USB (usando `dd` o BalenaEtcher) o montarlo e
 
 ---
 **¿Errores comunes?**
+
+### Error de QEMU (Symbol lookup error / GLIBC_PRIVATE)
+Si al ejecutar QEMU ves un error como `undefined symbol: __libc_pthread_init, version GLIBC_PRIVATE`, es porque la versión de QEMU instalada mediante **Snap** tiene un conflicto con las librerías de tu sistema Ubuntu.
+
+**Solución:** Desinstala la versión Snap e instala la versión nativa de los repositorios:
+```bash
+sudo snap remove qemu
+sudo apt install qemu-system-x86
+```
+
 - Si `make iso` falla con un error de `xorriso`, asegúrate de que el paquete esté instalado.
 - Si el kernel no arranca en VirtualBox, verifica que la aceleración VT-x/AMD-V esté activada en la BIOS de tu computadora real (aunque en Linux nativo esto suele ser menos problemático que en WSL).
