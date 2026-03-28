@@ -5,14 +5,13 @@
 #include "elf.h"
 #include "sched.h"
 #include "string.h"
-#include "limine.h"
 
-extern volatile struct limine_hhdm_request hhdm_request;
+#define HHDM_OFFSET 0
 
 static int elf_load_into_pagemap(uint64_t *pagemap, uint8_t *buffer) {
     Elf64_Ehdr *ehdr = (Elf64_Ehdr *)buffer;
     Elf64_Phdr *phdrs = (Elf64_Phdr *)(buffer + ehdr->e_phoff);
-    uint64_t hhdm = hhdm_request.response->offset;
+    uint64_t hhdm = HHDM_OFFSET;
 
     for (int i = 0; i < ehdr->e_phnum; i++) {
         if (phdrs[i].p_type == PT_LOAD) {

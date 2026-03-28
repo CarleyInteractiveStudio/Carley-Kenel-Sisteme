@@ -4,15 +4,12 @@
 #include "kheap.h"
 #include "gdt.h"
 #include "string.h"
-#include "limine.h"
 #include "spinlock.h"
 #include "cpu.h"
 
 #define STACK_SIZE (PAGE_SIZE * 2)
 #define DEFAULT_USER_HEAP_START 0x80000000000
-
-extern volatile struct limine_hhdm_request hhdm_request;
-extern volatile struct limine_smp_request smp_request;
+#define HHDM_OFFSET 0
 
 static task_t *task_list = NULL;
 static uint64_t next_id = 1;
@@ -50,7 +47,7 @@ task_t *sched_create_task(void (*entry)(void), bool user) {
         new_task->pml4 = vmm_get_kernel_pagemap();
     }
 
-    uint64_t hhdm = hhdm_request.response->offset;
+    uint64_t hhdm = HHDM_OFFSET;
     void *kstack_phys = pmm_alloc_pages(2);
     new_task->kernel_stack = (void *)((uintptr_t)kstack_phys + hhdm);
 

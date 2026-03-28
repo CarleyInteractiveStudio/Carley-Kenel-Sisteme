@@ -1,7 +1,6 @@
 #include "initrd.h"
 #include "kheap.h"
 #include "string.h"
-#include "limine.h"
 #include "drivers/ide.h"
 
 #define MAX_INITRD_FILES 32
@@ -41,6 +40,8 @@ typedef struct {
     char name[64];
     uint32_t size;
 } pack_header_t;
+
+void initrd_load_all(void *response) { (void)response; }
 
 void initrd_load_custom(void) {
     // Leer el sector 20480 (10MB) donde pusimos el initrd.bin en el Makefile

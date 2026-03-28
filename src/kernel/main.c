@@ -43,7 +43,7 @@ void kmain(boot_info_t *boot_info) {
 
     // Reemplazaremos pmm_init() para usar boot_info->memory_map_address
     pmm_init_custom(boot_info->memory_map_address, boot_info->memory_map_count);
-    vmm_init();
+    vmm_init(boot_info);
     kheap_init();
 
     cpu_init_local(0);

@@ -1,14 +1,12 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
-#include "limine.h"
 #include "boot_info.h"
 #include "string.h"
 #include "pmm.h"
 #include "spinlock.h"
 
-extern volatile struct limine_memmap_request memmap_request;
-extern volatile struct limine_hhdm_request hhdm_request;
+#define HHDM_OFFSET 0
 
 static uint8_t *bitmap = NULL;
 static uint64_t total_pages = 0;
@@ -30,8 +28,7 @@ static inline bool bitmap_test(uint64_t index) {
 }
 
 void pmm_init(void) {
-    // Obsoleto, redirigimos a la version custom si Limine no esta presente
-    // En un sistema real, Limine rellenaria las estructuras, pero aqui usamos el cargador Carley
+    // Obsoleto en el cargador Carley. Usamos pmm_init_custom.
 }
 
 void pmm_init_custom(uint64_t map_addr, uint32_t count) {
