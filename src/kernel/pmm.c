@@ -1,14 +1,10 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
-#include "limine.h"
 #include "boot_info.h"
 #include "string.h"
 #include "pmm.h"
 #include "spinlock.h"
-
-extern volatile struct limine_memmap_request memmap_request;
-extern volatile struct limine_hhdm_request hhdm_request;
 
 static uint8_t *bitmap = NULL;
 static uint64_t total_pages = 0;

@@ -1,21 +1,17 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
-#include "limine.h"
+#include "boot_info.h"
 #include "string.h"
 #include "vmm.h"
 #include "pmm.h"
 #include "spinlock.h"
 
-extern volatile struct limine_kernel_address_request kernel_address_request;
-extern volatile struct limine_hhdm_request hhdm_request;
-extern volatile struct limine_memmap_request memmap_request;
-
 static uint64_t *kernel_pml4 = NULL;
 static spinlock_t vmm_lock = 0;
 
 static inline uint64_t get_hhdm_offset(void) {
-    return hhdm_request.response->offset;
+    return 0; // Identity mapped
 }
 
 static inline void *phys_to_virt(uintptr_t phys) {
@@ -55,25 +51,26 @@ uintptr_t virt_to_phys_in_pagemap(uint64_t *pml4, uintptr_t virt) {
     return (pt[pt_idx] & ~0xFFFULL) + (virt & 0xFFF);
 }
 
-void vmm_init(void) {
+void vmm_init(boot_info_t *boot_info) {
     void *pml4_phys = pmm_alloc_page();
     kernel_pml4 = phys_to_virt((uintptr_t)pml4_phys);
     memset(kernel_pml4, 0, PAGE_SIZE);
 
     uint64_t offset = get_hhdm_offset();
-    struct limine_memmap_response *memmap = memmap_request.response;
-    for (uint64_t i = 0; i < memmap->entry_count; i++) {
-        struct limine_memmap_entry *entry = memmap->entries[i];
-        uintptr_t base = (entry->base / PAGE_SIZE) * PAGE_SIZE;
-        uint64_t length = ((entry->length + PAGE_SIZE - 1) / PAGE_SIZE) * PAGE_SIZE;
-        for (uintptr_t j = 0; j < length; j += PAGE_SIZE) {
-            vmm_map(kernel_pml4, base + j + offset, base + j, PTE_PRESENT | PTE_WRITABLE);
+    e820_entry_t *memmap = (e820_entry_t *)boot_info->memory_map_address;
+    for (uint32_t i = 0; i < boot_info->memory_map_count; i++) {
+        if (memmap[i].type == 1) { // Type 1 = Usable
+            uintptr_t base = (memmap[i].base / PAGE_SIZE) * PAGE_SIZE;
+            uint64_t length = ((memmap[i].length + PAGE_SIZE - 1) / PAGE_SIZE) * PAGE_SIZE;
+            for (uintptr_t j = 0; j < length; j += PAGE_SIZE) {
+                vmm_map(kernel_pml4, base + j + offset, base + j, PTE_PRESENT | PTE_WRITABLE);
+            }
         }
     }
 
-    struct limine_kernel_address_response *ka = kernel_address_request.response;
-    for (uintptr_t i = 0; i < 0x2000000; i += PAGE_SIZE) {
-        vmm_map(kernel_pml4, ka->virtual_base + i, ka->physical_base + i, PTE_PRESENT | PTE_WRITABLE);
+    // Kernel mapeado en 1MB (identity mapping)
+    for (uintptr_t i = 0x100000; i < 0x100000 + 0x2000000; i += PAGE_SIZE) {
+        vmm_map(kernel_pml4, i, i, PTE_PRESENT | PTE_WRITABLE);
     }
     vmm_switch_pagemap(kernel_pml4);
 }
