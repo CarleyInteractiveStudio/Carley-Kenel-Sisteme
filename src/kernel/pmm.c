@@ -1,9 +1,9 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
-#include "common/limine.h"
+#include "limine.h"
 #include "boot_info.h"
-#include "common/string.h"
+#include "string.h"
 #include "pmm.h"
 #include "spinlock.h"
 

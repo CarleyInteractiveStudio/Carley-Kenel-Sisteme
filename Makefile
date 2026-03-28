@@ -8,12 +8,12 @@ KERNEL := kernel.elf
 # el kernel se carga en el primer 1MB (Identity mapped)
 CFLAGS := -Wall -Wextra -std=c11 -ffreestanding -fno-stack-protector -fno-stack-check \
           -fno-lto -fno-pie -fno-pic -m64 -march=x86-64 -mno-80387 -mno-mmx -mno-sse \
-          -mno-sse2 -mno-red-zone -I.
+          -mno-sse2 -mno-red-zone -Isrc/kernel -Icommon
 
 LDFLAGS := -nostdlib -static -m elf_x86_64 -z max-page-size=0x1000 -T linker.ld --oformat binary
 
-C_SOURCES := $(shell find kernel -name '*.c') $(shell find common -name '*.c') $(shell find drivers -name '*.c')
-S_SOURCES := $(shell find kernel -name '*.s')
+C_SOURCES := $(shell find src/kernel -name '*.c') $(shell find common -name '*.c')
+S_SOURCES := $(shell find src/kernel -name '*.s')
 OBJ := $(C_SOURCES:.c=.o) $(S_SOURCES:.s=.o)
 
 .PHONY: all clean iso userland setup bootloader
@@ -21,32 +21,32 @@ OBJ := $(C_SOURCES:.c=.o) $(S_SOURCES:.s=.o)
 all: bootloader $(KERNEL) userland carley-os.img
 
 bootloader:
-	nasm -f bin boot/boot.asm -o boot/boot.bin
-	nasm -f bin boot/stage2.asm -o boot/stage2.bin
+	nasm -f bin src/boot/boot.asm -o src/boot/boot.bin
+	nasm -f bin src/boot/stage2.asm -o src/boot/stage2.bin
 
 $(KERNEL): $(OBJ)
 	$(LD) $(LDFLAGS) $(OBJ) -o $@
 
-tools/pack_initrd: tools/pack_initrd.c
+meta/pack_initrd: meta/pack_initrd.c
 	gcc $< -o $@
 
-initrd.bin: tools/pack_initrd userland
-	./tools/pack_initrd $@ user/*.elf user/libc.so
+initrd.bin: meta/pack_initrd userland
+	./meta/pack_initrd $@ src/user/*.elf src/user/libc.so
 
 carley-os.img: bootloader $(KERNEL) initrd.bin
 	# Crear una imagen de disco de 40MB llena de ceros
 	dd if=/dev/zero of=$@ bs=1M count=40
 	# Stage 1 (MBR) en sector 1
-	dd if=boot/boot.bin of=$@ conv=notrunc
+	dd if=src/boot/boot.bin of=$@ conv=notrunc
 	# Stage 2 en sector 2
-	dd if=boot/stage2.bin of=$@ seek=1 conv=notrunc
+	dd if=src/boot/stage2.bin of=$@ seek=1 conv=notrunc
 	# Kernel en 1MB (Sector 2048)
 	dd if=$(KERNEL) of=$@ seek=2048 conv=notrunc
 	# Initrd en 10MB (Sector 20480)
 	dd if=initrd.bin of=$@ seek=20480 conv=notrunc
 
 userland:
-	$(MAKE) -C user
+	$(MAKE) -C src/user
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
@@ -64,5 +64,5 @@ setup:
 	@echo "Ejecuta: 'sudo apt install nasm xorriso mtools qemu-system-x86'"
 
 clean:
-	rm -rf $(OBJ) $(KERNEL) carley-kernel.iso carley-os.iso iso_root carley-disk.img
-	$(MAKE) -C user clean
+	rm -rf $(OBJ) $(KERNEL) src/boot/*.bin carley-kernel.iso carley-os.iso carley-os.img initrd.bin meta/pack_initrd
+	$(MAKE) -C src/user clean

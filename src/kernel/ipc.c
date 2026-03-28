@@ -1,6 +1,6 @@
 #include "ipc.h"
 #include "sched.h"
-#include "common/string.h"
+#include "string.h"
 #include "kheap.h"
 #include "spinlock.h"
 

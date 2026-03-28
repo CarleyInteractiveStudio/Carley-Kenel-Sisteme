@@ -2,7 +2,7 @@
 #define VIDEO_H
 
 #include <stdint.h>
-#include "common/limine.h"
+#include "limine.h"
 
 void video_init(struct limine_framebuffer *fb);
 void video_init_vbe(uint64_t addr, uint32_t w, uint32_t h);

@@ -1,8 +1,8 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
-#include "common/limine.h"
-#include "common/string.h"
+#include "limine.h"
+#include "string.h"
 #include "vmm.h"
 #include "pmm.h"
 #include "spinlock.h"

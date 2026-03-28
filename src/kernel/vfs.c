@@ -1,6 +1,6 @@
 #include "vfs.h"
 #include "kheap.h"
-#include "common/string.h"
+#include "string.h"
 #include "spinlock.h"
 
 vfs_node_t *vfs_root = NULL;

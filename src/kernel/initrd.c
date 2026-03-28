@@ -1,7 +1,7 @@
 #include "initrd.h"
 #include "kheap.h"
-#include "common/string.h"
-#include "common/limine.h"
+#include "string.h"
+#include "limine.h"
 #include "drivers/ide.h"
 
 #define MAX_INITRD_FILES 32

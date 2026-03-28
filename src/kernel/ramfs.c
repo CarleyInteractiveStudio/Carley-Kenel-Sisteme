@@ -1,6 +1,6 @@
 #include "ramfs.h"
 #include "kheap.h"
-#include "common/string.h"
+#include "string.h"
 
 #define MAX_RAMFS_FILES 32
 

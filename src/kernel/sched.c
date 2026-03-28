@@ -3,8 +3,8 @@
 #include "vmm.h"
 #include "kheap.h"
 #include "gdt.h"
-#include "common/string.h"
-#include "common/limine.h"
+#include "string.h"
+#include "limine.h"
 #include "spinlock.h"
 #include "cpu.h"
 

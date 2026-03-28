@@ -1,5 +1,5 @@
 #include "video.h"
-#include "common/string.h"
+#include "string.h"
 #include <stdbool.h>
 
 static struct limine_framebuffer *framebuffer;

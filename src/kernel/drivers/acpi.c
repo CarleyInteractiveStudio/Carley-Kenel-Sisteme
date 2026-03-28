@@ -1,5 +1,5 @@
 #include "acpi.h"
-#include "common/string.h"
+#include "string.h"
 
 static rsdp_t *rsdp = NULL;
 static acpi_header_t *rsdt = NULL;

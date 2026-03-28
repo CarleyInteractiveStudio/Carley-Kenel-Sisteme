@@ -3,7 +3,7 @@
 #include "vmm.h"
 #include "sched.h"
 #include "spinlock.h"
-#include "common/string.h"
+#include "string.h"
 
 static shm_segment_t shm_segments[MAX_SHM_SEGMENTS];
 static spinlock_t shm_lock = 0;

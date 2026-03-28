@@ -19,11 +19,23 @@ Carley OS es un sistema operativo moderno, seguro y visualmente atractivo diseñ
     *   Cargador ELF dinámico con soporte para librerías compartidas (`libc.so`).
 *   **Multimedia:** Mezclador de audio de 4 canales para hardware SoundBlaster 16.
 
+## 📁 Estructura del Proyecto
+
+El sistema está organizado de forma profesional para facilitar su escalabilidad:
+
+*   **`src/boot/`**: Código fuente del Cargador de Arranque (MBR y Stage 2 en NASM).
+*   **`src/kernel/`**: El núcleo del sistema (Gestión de memoria, procesos, IPC).
+    *   **`src/kernel/drivers/`**: Controladores integrados (Video VBE, PCI, ACPI, IDE, Audio, USB).
+*   **`src/user/`**: Aplicaciones de usuario y entorno gráfico (Explorer, Terminal, Dashboard).
+    *   **`src/user/libc/`**: La librería estándar del sistema y el SDK gráfico (`libgui`).
+*   **`common/`**: Cabeceras y funciones compartidas entre el kernel y el espacio de usuario.
+*   **`meta/`**: Herramientas de construcción y scripts auxiliares.
+
 ## 🏗️ Arquitectura Técnica
 
-Carley OS sigue una filosofía de microkernel estricto:
+Carley OS sigue una filosofía de microkernel:
 - **Kernel:** Gestiona memoria (PMM/VMM), hilos, IPC y el despacho de interrupciones.
-- **Drivers de Usuario:** El teclado, el ratón y la entrada de juegos se ejecutan en Ring 3 con privilegios controlados.
+- **Drivers:** El teclado, el ratón y la entrada de juegos se ejecutan en Ring 3 con privilegios controlados.
 - **Servidores:** El **Composer** actúa como servidor gráfico, procesando comandos de dibujo de otros procesos.
 - **VFS:** Una capa virtual que unifica Initrd (lectura), RamFS (temporal) y CarleyFS (persistente).
 

@@ -1,5 +1,5 @@
 #include "gdt.h"
-#include "common/string.h"
+#include "string.h"
 
 #include "cpu.h"
 

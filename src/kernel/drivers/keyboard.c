@@ -2,7 +2,7 @@
 #include "kernel/ipc.h"
 #include "kernel/keyboard_buf.h"
 #include "kernel/sched.h" // Para ipc_msg_t
-#include "common/string.h"
+#include "string.h"
 
 static const char scancode_to_ascii[] = {
     0,  27, '1', '2', '3', '4', '5', '6', '7', '8',

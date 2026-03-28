@@ -2,7 +2,7 @@
 #include <stddef.h>
 #include <stdbool.h>
 #include "boot_info.h"
-#include "common/string.h"
+#include "string.h"
 #include "pmm.h"
 #include "vmm.h"
 #include "kheap.h"

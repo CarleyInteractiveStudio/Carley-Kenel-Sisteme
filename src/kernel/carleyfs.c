@@ -1,7 +1,7 @@
 #include "carleyfs.h"
 #include "drivers/ide.h"
 #include "kheap.h"
-#include "common/string.h"
+#include "string.h"
 
 #define CARLEYFS_MAX_FILES 64
 

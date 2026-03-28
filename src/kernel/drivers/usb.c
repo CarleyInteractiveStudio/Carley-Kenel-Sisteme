@@ -1,6 +1,6 @@
 #include "usb.h"
 #include "pci.h"
-#include "common/string.h"
+#include "string.h"
 
 void usb_init(void) {
     // Buscar controladores EHCI (USB 2.0)

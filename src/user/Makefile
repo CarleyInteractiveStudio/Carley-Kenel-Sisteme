@@ -4,8 +4,8 @@ CXX := g++
 AR := ar
 AS := gcc
 
-CFLAGS := -Wall -Wextra -std=c11 -ffreestanding -fno-stack-protector -fPIC -m64 -Ilibc/include -I..
-CXXFLAGS := -Wall -Wextra -std=c++11 -ffreestanding -fno-stack-protector -fno-exceptions -fno-rtti -fPIC -m64 -Ilibc/include -I..
+CFLAGS := -Wall -Wextra -std=c11 -ffreestanding -fno-stack-protector -fPIC -m64 -Ilibc/include -I../../common
+CXXFLAGS := -Wall -Wextra -std=c++11 -ffreestanding -fno-stack-protector -fno-exceptions -fno-rtti -fPIC -m64 -Ilibc/include -I../../common
 LDFLAGS_STATIC := -nostdlib -static
 LDFLAGS_DYNAMIC := -nostdlib -shared
 

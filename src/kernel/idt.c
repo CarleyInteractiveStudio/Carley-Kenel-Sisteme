@@ -1,5 +1,5 @@
 #include "idt.h"
-#include "common/string.h"
+#include "string.h"
 #include "io.h"
 #include "sched.h"
 #include "syscall.h"

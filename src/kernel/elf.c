@@ -4,8 +4,8 @@
 #include "kheap.h"
 #include "elf.h"
 #include "sched.h"
-#include "common/string.h"
-#include "common/limine.h"
+#include "string.h"
+#include "limine.h"
 
 extern volatile struct limine_hhdm_request hhdm_request;
 
