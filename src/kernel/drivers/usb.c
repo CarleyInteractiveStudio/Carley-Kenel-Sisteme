@@ -13,5 +13,6 @@ void usb_init(void) {
 void ehci_init(pci_device_t *pci) {
     // Inicialización básica del controlador EHCI
     uint32_t base = pci->bar0 & 0xFFFFFFF0;
+    (void)base; // Prevent unused warning, placeholder for EHCI register access
     // (Lógica de registros EHCI omitida por brevedad)
 }

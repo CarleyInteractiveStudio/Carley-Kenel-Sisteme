@@ -23,7 +23,8 @@ start:
     int 0x13
     jc disk_error
 
-    ; Saltar al Stage 2
+    ; Pasar disco de arranque en DL al Stage 2
+    mov dl, [boot_drive]
     jmp 0x8000
 
 disk_error:

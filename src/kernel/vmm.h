@@ -4,12 +4,15 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include "boot_info.h"
 
 #define PTE_PRESENT (1ULL << 0)
 #define PTE_WRITABLE (1ULL << 1)
 #define PTE_USER (1ULL << 2)
 
-void vmm_init(void);
+#define HHDM_OFFSET 0xFFFF800000000000ULL
+
+void vmm_init(boot_info_t *boot_info);
 void vmm_map(uint64_t *pml4, uintptr_t virt, uintptr_t phys, uint64_t flags);
 void vmm_unmap(uint64_t *pml4, uintptr_t virt);
 void vmm_switch_pagemap(uint64_t *pml4);

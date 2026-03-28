@@ -54,10 +54,17 @@ userland:
 %.o: %.s
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# Mantenemos el target iso por compatibilidad, pero ahora recomendamos carley-os.img
-iso: carley-os.img
-	@echo "AVISO: Se ha generado carley-os.img (imagen de disco duro)."
-	@echo "Se recomienda usar carley-os.img como disco duro en VirtualBox."
+# Target para generar la ISO.
+# Dado que el cargador propio es LBA-dependiente, la forma más estable
+# de generar una "ISO" que VirtualBox acepte como CD-ROM es usar
+# la imagen de disco directamente con atributos de arranque.
+carley-os.iso: carley-os.img
+	# Creamos una ISO que contiene la imagen de disco como sector de arranque.
+	# Esto permite que VirtualBox la reconozca como un medio arrancable.
+	xorriso -as mkisofs -R -J -b carley-os.img -no-emul-boot -boot-load-size 4 -o $@ carley-os.img
+
+# Alias para generar la ISO
+iso: carley-os.iso
 
 setup:
 	@echo "Entorno listo. Asegúrate de tener 'nasm' instalado."
