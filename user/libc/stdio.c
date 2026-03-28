@@ -1,0 +1,208 @@
+#include <stdarg.h>
+#include "include/stdio.h"
+#include "include/string.h"
+#include "include/stdlib.h"
+
+extern long syscall1(int num, long arg1);
+extern long syscall3(int num, long arg1, long arg2, long arg3);
+extern long syscall4(int num, long arg1, long arg2, long arg3, long arg4);
+
+#define SYS_OPEN  3
+#define SYS_READ  4
+#define SYS_WRITE 6
+
+int putchar(int c) {
+    char buf = (char)c;
+    syscall4(SYS_WRITE, 1, 0, 1, (long)&buf);
+    return c;
+}
+
+int puts(const char *s) {
+    size_t len = strlen(s);
+    syscall4(SYS_WRITE, 1, 0, len, (long)s);
+    putchar('\n');
+    return 0;
+}
+
+char *fgets(char *s, int size, FILE *stream) {
+    int i = 0;
+    while (i < size - 1) {
+        char c;
+        if (fread(&c, 1, 1, stream) < 1) break;
+        s[i++] = c;
+        if (c == '\n') break;
+    }
+    if (i == 0) return NULL;
+    s[i] = 0;
+    return s;
+}
+
+static void print_uint(uint64_t n, int base) {
+    char buf[32];
+    int i = 0;
+    const char *digits = "0123456789ABCDEF";
+    if (n == 0) { putchar('0'); return; }
+    while (n > 0) {
+        buf[i++] = digits[n % base];
+        n /= base;
+    }
+    while (--i >= 0) putchar(buf[i]);
+}
+
+static void print_int(int64_t n) {
+    if (n < 0) { putchar('-'); n = -n; }
+    print_uint((uint64_t)n, 10);
+}
+
+static void sprintf_uint(char **str, uint64_t n, int base) {
+    char buf[32];
+    int i = 0;
+    const char *digits = "0123456789ABCDEF";
+    if (n == 0) { *(*str)++ = '0'; return; }
+    while (n > 0) {
+        buf[i++] = digits[n % base];
+        n /= base;
+    }
+    while (--i >= 0) *(*str)++ = buf[i];
+}
+
+static void sprintf_int(char **str, int64_t n) {
+    if (n < 0) { *(*str)++ = '-'; n = -n; }
+    sprintf_uint(str, (uint64_t)n, 10);
+}
+
+int sprintf(char *str, const char *format, ...) {
+    va_list args;
+    va_start(args, format);
+    char *p = str;
+    while (*format) {
+        if (*format == '%') {
+            format++;
+            switch (*format) {
+                case 's': {
+                    const char *s = va_arg(args, const char *);
+                    if (!s) s = "(null)";
+                    while (*s) *p++ = *s++;
+                    break;
+                }
+                case 'd':
+                case 'i':
+                    sprintf_int(&p, va_arg(args, int));
+                    break;
+                case 'u':
+                    sprintf_uint(&p, va_arg(args, unsigned int), 10);
+                    break;
+                case 'x':
+                case 'X':
+                    sprintf_uint(&p, va_arg(args, unsigned int), 16);
+                    break;
+                case 'c':
+                    *p++ = (char)va_arg(args, int);
+                    break;
+                case '%':
+                    *p++ = '%';
+                    break;
+            }
+            format++;
+        } else {
+            *p++ = *format++;
+        }
+    }
+    *p = 0;
+    va_end(args);
+    return (int)(p - str);
+}
+
+int printf(const char *format, ...) {
+    va_list args;
+    va_start(args, format);
+    int count = 0;
+    while (*format) {
+        if (*format == '%') {
+            format++;
+            switch (*format) {
+                case 's': {
+                    const char *s = va_arg(args, const char *);
+                    if (!s) s = "(null)";
+                    while (*s) { putchar(*s++); count++; }
+                    break;
+                }
+                case 'd':
+                case 'i':
+                    print_int(va_arg(args, int));
+                    break;
+                case 'u':
+                    print_uint(va_arg(args, unsigned int), 10);
+                    break;
+                case 'x':
+                case 'X':
+                    print_uint(va_arg(args, unsigned int), 16);
+                    break;
+                case 'p':
+                    putchar('0'); putchar('x');
+                    print_uint((uint64_t)va_arg(args, void *), 16);
+                    break;
+                case 'c':
+                    putchar(va_arg(args, int));
+                    count++;
+                    break;
+                case '%':
+                    putchar('%');
+                    count++;
+                    break;
+                default:
+                    putchar('%');
+                    putchar(*format);
+                    count += 2;
+                    break;
+            }
+            format++;
+        } else {
+            putchar(*format++);
+            count++;
+        }
+    }
+    va_end(args);
+    return count;
+}
+
+FILE *fopen(const char *path, const char *mode) {
+    (void)mode;
+    long fd = syscall1(SYS_OPEN, (long)path);
+    if (fd < 0) return NULL;
+
+    FILE *f = malloc(sizeof(FILE));
+    f->vfs_node = (void *)fd;
+    f->pos = 0;
+    f->error = 0;
+    return f;
+}
+
+size_t fread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
+    if (!stream) return 0;
+    long ret = syscall4(SYS_READ, (long)stream->vfs_node, stream->pos, size * nmemb, (long)ptr);
+    if (ret < 0) { stream->error = 1; return 0; }
+    stream->pos += ret;
+    return (size_t)ret / size;
+}
+
+size_t fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream) {
+    if (!stream) return 0;
+    long ret = syscall4(SYS_WRITE, (long)stream->vfs_node, stream->pos, size * nmemb, (long)ptr);
+    if (ret < 0) { stream->error = 1; return 0; }
+    stream->pos += ret;
+    return (size_t)ret / size;
+}
+
+int fseek(FILE *stream, long offset, int whence) {
+    if (!stream) return -1;
+    if (whence == SEEK_SET) stream->pos = offset;
+    else if (whence == SEEK_CUR) stream->pos += offset;
+    // SEEK_END no implementado sin vfs_stat o similar
+    return 0;
+}
+
+int fclose(FILE *stream) {
+    if (stream) free(stream);
+    return 0;
+}

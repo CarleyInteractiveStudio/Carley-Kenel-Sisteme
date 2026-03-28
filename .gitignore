@@ -1,0 +1,22 @@
+# Binarios de Kernel y Objetos
+*.o
+*.elf
+*.bin
+*.iso
+*.img
+iso_root/
+
+# Librerias compartidas y estaticas
+*.so
+*.a
+
+# Archivos de depuración y logs
+*.log
+*.map
+*.sym
+
+# Directorios de compilación y temporales
+build/
+dist/
+bin/
+tmp/

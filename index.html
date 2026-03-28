@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Carley OS - Modern Dashboard Preview</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            overflow: hidden;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); /* Fondo estilo moderno */
+        }
+
+        /* Escritorio */
+        #desktop {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, 100px);
+            grid-template-rows: repeat(auto-fill, 120px);
+            padding: 40px;
+            gap: 30px;
+        }
+
+        .desktop-app {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: white;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .desktop-app:hover {
+            transform: scale(1.1);
+        }
+
+        .app-icon {
+            width: 70px;
+            height: 70px;
+            background: rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(10px);
+            border-radius: 18px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 30px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+
+        .app-name {
+            font-size: 14px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+        }
+
+        /* La "Burbuja de Cristal" (Dock) */
+        #dock-container {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #dock {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(25px);
+            -webkit-backdrop-filter: blur(25px);
+            border-radius: 40px;
+            padding: 10px 25px;
+            display: flex;
+            gap: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        #dock:hover {
+            transform: translateY(-5px);
+            padding: 15px 30px;
+        }
+
+        .dock-app {
+            width: 55px;
+            height: 55px;
+            background: rgba(255, 255, 255, 0.25);
+            border-radius: 14px;
+            cursor: pointer;
+            transition: transform 0.2s, background 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+        }
+
+        .dock-app:hover {
+            transform: scale(1.2) translateY(-10px);
+            background: rgba(255, 255, 255, 0.4);
+        }
+
+        /* Botón Principal (Estilo Windows/Apple Central) */
+        .main-btn {
+            background: linear-gradient(135deg, #00d2ff 0%, #3a7bd5 100%) !important;
+            box-shadow: 0 0 20px rgba(0, 210, 255, 0.5);
+        }
+
+        /* Menu de Todas las Apps */
+        #apps-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.6);
+            backdrop-filter: blur(15px);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+        }
+
+        #apps-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 120px);
+            grid-template-rows: repeat(3, 150px);
+            gap: 20px;
+            text-align: center;
+        }
+
+        /* Barra de Estado Superior */
+        #top-bar {
+            width: 100%;
+            height: 30px;
+            background: rgba(0,0,0,0.2);
+            backdrop-filter: blur(5px);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 20px;
+            color: white;
+            font-size: 13px;
+            box-sizing: border-box;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div id="top-bar">
+        <div><b>Carley OS</b> (PC Mode)</div>
+        <div id="clock">15:30:45</div>
+        <div>CPU: 4 Cores | RAM: 1024 MB</div>
+    </div>
+
+    <div id="desktop">
+        <!-- Apps grandes en escritorio -->
+        <div class="desktop-app" onclick="alert('Iniciando Carley IDE...')">
+            <div class="app-icon">💻</div>
+            <div class="app-name">Desarrollo</div>
+        </div>
+        <div class="desktop-app" onclick="alert('Iniciando Gaming Hub...')">
+            <div class="app-icon">🎮</div>
+            <div class="app-name">Juegos</div>
+        </div>
+        <div class="desktop-app" onclick="alert('Iniciando Carley Files...')">
+            <div class="app-icon">📂</div>
+            <div class="app-name">Archivos</div>
+        </div>
+        <div class="desktop-app" onclick="alert('Iniciando Terminal...')">
+            <div class="app-icon">🐚</div>
+            <div class="app-name">Terminal</div>
+        </div>
+    </div>
+
+    <div id="dock-container">
+        <div id="dock">
+            <div class="dock-app main-btn" onclick="toggleApps()">C</div>
+            <div class="dock-app" title="Navegador">🌐</div>
+            <div class="dock-app" title="Editor de Código">📝</div>
+            <div class="dock-app" title="Música">🎵</div>
+            <div class="dock-app" title="Ajustes">⚙️</div>
+        </div>
+    </div>
+
+    <div id="apps-overlay" onclick="toggleApps()">
+        <div id="apps-grid">
+            <div class="desktop-app"><div class="app-icon">🐍</div><div class="app-name">Python 3.x</div></div>
+            <div class="desktop-app"><div class="app-icon">🌐</div><div class="app-name">JS Engine</div></div>
+            <div class="desktop-app"><div class="app-icon">🎞️</div><div class="app-name">Video Player</div></div>
+            <div class="desktop-app"><div class="app-icon">🎨</div><div class="app-name">Carley Draw</div></div>
+            <div class="desktop-app"><div class="app-icon">🔢</div><div class="app-name">Calc</div></div>
+            <div class="desktop-app"><div class="app-icon">⏰</div><div class="app-name">Clock</div></div>
+            <div class="desktop-app"><div class="app-icon">🔒</div><div class="app-name">Security Center</div></div>
+            <div class="desktop-app"><div class="app-icon">📧</div><div class="app-name">Mail</div></div>
+        </div>
+    </div>
+
+    <script>
+        function toggleApps() {
+            const overlay = document.getElementById('apps-overlay');
+            overlay.style.display = (overlay.style.display === 'flex' ? 'none' : 'flex');
+        }
+
+        // Actualizar reloj
+        setInterval(() => {
+            const now = new Date();
+            document.getElementById('clock').innerText = now.toLocaleTimeString();
+        }, 1000);
+    </script>
+</body>
+</html>
