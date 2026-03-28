@@ -10,6 +10,7 @@
 
 /* Inicializa el Gestor de Memoria Física usando el mapa de memoria de Limine */
 void pmm_init(void);
+void pmm_init_custom(uint64_t map_addr, uint32_t count);
 
 /* Reserva una página física de 4KB y devuelve su dirección física */
 void *pmm_alloc_page(void);

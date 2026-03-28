@@ -6,5 +6,6 @@
 #include "vfs.h"
 
 void initrd_load_all(struct limine_module_response *response);
+void initrd_load_custom(void);
 
 #endif

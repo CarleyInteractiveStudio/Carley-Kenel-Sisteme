@@ -3,12 +3,62 @@
 
 stage2_start:
     cli
-    ; 1. Pasar de 16-bit a 32-bit (Modo Protegido)
+    xor ax, ax
+    mov ds, ax
+    mov es, ax
+
+    ; 1. Habilitar la línea A20 (para acceder a toda la memoria)
+    in al, 0x92
+    or al, 2
+    out 0x92, al
+
+    ; 2. Detectar Mapa de Memoria BIOS (E820)
+    ;    Guardaremos el mapa en 0x9000
+    mov di, 0x9000
+    xor ebx, ebx
+    mov edx, 0x534D4150    ; 'SMAP'
+    mov word [mem_count], 0
+do_e820:
+    mov eax, 0xe820
+    mov ecx, 24
+    int 0x15
+    jc e820_done
+    cmp eax, 0x534D4150
+    jne e820_done
+    add di, 24
+    inc word [mem_count]
+    test ebx, ebx
+    jne do_e820
+e820_done:
+
+    ; 3. Configurar Modo de Video VBE (1024x768x32)
+    ;    Obtener información del modo 0x118 (1024x768x32)
+    mov ax, 0x4f01
+    mov cx, 0x118          ; Modo 1024x768x32
+    mov di, 0x7000         ; Buffer para VBE Mode Info
+    int 0x10
+    cmp ax, 0x004f
+    jne video_error
+
+    ; Activar el modo de video
+    mov ax, 0x4f02
+    mov bx, 0x4118         ; Modo 0x118 + bit 14 (Linear Framebuffer)
+    int 0x10
+    cmp ax, 0x004f
+    jne video_error
+
+    ; 4. Preparar Paso a 32-bit (Modo Protegido)
     lgdt [gdt_ptr]
     mov eax, cr0
     or eax, 1
     mov cr0, eax
     jmp 0x08:pm_start
+
+video_error:
+    mov ah, 0x0e
+    mov al, 'V'
+    int 0x10
+    hlt
 
 [bits 32]
 pm_start:
@@ -18,41 +68,35 @@ pm_start:
     mov ss, ax
     mov esp, 0x90000
 
-    ; 2. Preparar el Paso a Modo Largo (64-bit)
-    ;    Crearemos la tabla de páginas inicial en 0x1000
-    ;    PML4 -> PDPT -> PD -> 2MB Pages
+    ; 5. Preparar Paginación para Modo Largo (64-bit)
+    ;    Mapeamos el primer Gigabyte (Identity Mapping)
     mov edi, 0x1000
     mov cr3, edi
     xor eax, eax
     mov ecx, 4096
     rep stosd
 
-    ; PML4[0] = PDPT (0x2000) | PRESENT | WRITABLE
-    mov dword [0x1000], 0x2003
-    ; PDPT[0] = PD (0x3000) | PRESENT | WRITABLE
-    mov dword [0x2000], 0x3003
-    ; PD[0...511] = 512 páginas de 2MB cada una (Mapeamos los primeros 1GB)
+    mov dword [0x1000], 0x2003 ; PML4[0] -> PDPT
+    mov dword [0x2000], 0x3003 ; PDPT[0] -> PD
     mov edi, 0x3000
-    mov eax, 0x83        ; PageSize(0x80) | Writable(0x2) | Present(0x1)
+    mov eax, 0x00000083        ; 2MB Pages | Writable | Present
     mov ecx, 512
 map_loop:
     mov [edi], eax
-    add eax, 0x200000    ; Siguiente página de 2MB
+    add eax, 0x200000
     add edi, 8
     loop map_loop
 
-    ; Habilitar PAE (Physical Address Extension)
+    ; 6. Habilitar PAE y Long Mode
     mov eax, cr4
     or eax, 1 << 5
     mov cr4, eax
 
-    ; Habilitar Long Mode en EFER MSR
     mov ecx, 0xc0000080
     rdmsr
     or eax, 1 << 8
     wrmsr
 
-    ; Habilitar Paginación
     mov eax, cr0
     or eax, 1 << 31
     mov cr0, eax
@@ -67,29 +111,42 @@ long_mode_start:
     mov es, ax
     mov ss, ax
 
-    ; Saltar al kernel. El kernel estará cargado en la dirección fija 0x100000 (1MB)
-    ; (El Makefile pegará el kernel después del Stage 2)
+    ; 7. Preparar la estructura Boot Info para el Kernel
+    ;    La pondremos en 0x6000
+    ;    [0x6000]: Framebuffer Address (8 bytes)
+    ;    [0x6008]: Screen Width (4 bytes)
+    ;    [0x600c]: Screen Height (4 bytes)
+    ;    [0x6010]: Memory Map Address (8 bytes)
+    ;    [0x6018]: Memory Map Count (4 bytes)
+
+    mov rax, [0x7000 + 40]    ; LFB Address de VBE Info
+    mov [0x6000], rax
+    mov dword [0x6008], 1024
+    mov dword [0x600c], 768
+    mov qword [0x6010], 0x9000
+    movzx rax, word [mem_count]
+    mov [0x6018], eax
+
+    ; Pasar el puntero de Boot Info en RDI (primer argumento de C)
+    mov rdi, 0x6000
+
+    ; Saltar al kernel en 1MB
     mov rax, 0x100000
     jmp rax
 
-; GDT para Modo Protegido (32-bit)
-gdt_start:
-    dq 0x0000000000000000
-    dq 0x00cf9a000000ffff ; Código
-    dq 0x00cf92000000ffff ; Datos
-gdt_end:
+mem_count dw 0
 
+; GDTs
+gdt_start:
+    dq 0, 0x00cf9a000000ffff, 0x00cf92000000ffff
+gdt_end:
 gdt_ptr:
     dw gdt_end - gdt_start - 1
     dd gdt_start
 
-; GDT para Modo Largo (64-bit)
 gdt_start_long:
-    dq 0x0000000000000000
-    dq 0x00209a0000000000 ; Código 64
-    dq 0x0000920000000000 ; Datos 64
+    dq 0, 0x00209a0000000000, 0x0000920000000000
 gdt_end_long:
-
 gdt_ptr_long:
     dw gdt_end_long - gdt_start_long - 1
     dq gdt_start_long

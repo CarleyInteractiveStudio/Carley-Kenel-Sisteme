@@ -2,6 +2,7 @@
 #include <stddef.h>
 #include <stdbool.h>
 #include "common/limine.h"
+#include "boot_info.h"
 #include "common/string.h"
 #include "pmm.h"
 #include "spinlock.h"
@@ -29,16 +30,18 @@ static inline bool bitmap_test(uint64_t index) {
 }
 
 void pmm_init(void) {
-    struct limine_memmap_response *memmap = memmap_request.response;
-    if (memmap == NULL) return;
+    // Obsoleto, redirigimos a la version custom si Limine no esta presente
+    // En un sistema real, Limine rellenaria las estructuras, pero aqui usamos el cargador Carley
+}
 
-    if (hhdm_request.response) hhdm_offset = hhdm_request.response->offset;
+void pmm_init_custom(uint64_t map_addr, uint32_t count) {
+    e820_entry_t *map = (e820_entry_t *)map_addr;
+    hhdm_offset = 0; // En nuestro cargador el kernel es identity mapped (0-4GB)
 
     uint64_t highest_address = 0;
-    for (uint64_t i = 0; i < memmap->entry_count; i++) {
-        struct limine_memmap_entry *entry = memmap->entries[i];
-        if (entry->type == LIMINE_MEMMAP_USABLE || entry->type == LIMINE_MEMMAP_BOOTLOADER_RECLAIMABLE) {
-            uint64_t top = entry->base + entry->length;
+    for (uint32_t i = 0; i < count; i++) {
+        if (map[i].type == 1) { // Type 1 = Usable
+            uint64_t top = map[i].base + map[i].length;
             if (top > highest_address) highest_address = top;
         }
     }
@@ -47,32 +50,20 @@ void pmm_init(void) {
     uint64_t bitmap_size = (total_pages / 8);
     bitmap_size = (bitmap_size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
 
-    /* Buscar hueco para el bitmap */
-    for (uint64_t i = 0; i < memmap->entry_count; i++) {
-        struct limine_memmap_entry *entry = memmap->entries[i];
-        if (entry->type == LIMINE_MEMMAP_USABLE && entry->length >= bitmap_size) {
-            bitmap = (uint8_t *)(entry->base + hhdm_offset);
-            memset(bitmap, 0xff, bitmap_size);
+    // Buscar sitio para el bitmap. Usaremos los primeros 1MB libres despues del Kernel
+    // El kernel esta en 0x100000. Pondremos el bitmap en 0x500000 (5MB) para estar seguros.
+    bitmap = (uint8_t *)0x500000;
+    memset(bitmap, 0xff, bitmap_size);
 
-            /* Marcar el bitmap como ocupado inmediatamente */
-            uint64_t start_page = entry->base / PAGE_SIZE;
-            uint64_t pages_needed = bitmap_size / PAGE_SIZE;
-
-            /* No usamos bitmap_set aquí porque aún no hemos terminado pmm_init */
-            /* En lugar de eso, reducimos el segmento usable de la entrada */
-            entry->base += bitmap_size;
-            entry->length -= bitmap_size;
-            break;
-        }
-    }
-
-    /* Marcar como libres las regiones usables */
-    for (uint64_t i = 0; i < memmap->entry_count; i++) {
-        struct limine_memmap_entry *entry = memmap->entries[i];
-        if (entry->type == LIMINE_MEMMAP_USABLE) {
-            for (uint64_t j = 0; j < entry->length; j += PAGE_SIZE) {
-                bitmap_clear((entry->base + j) / PAGE_SIZE);
-                free_pages++;
+    for (uint32_t i = 0; i < count; i++) {
+        if (map[i].type == 1) {
+            for (uint64_t j = 0; j < map[i].length; j += PAGE_SIZE) {
+                uint64_t addr = map[i].base + j;
+                // No marcar como libre si esta por debajo de 6MB (Kernel, Bootloader, Stack, Bitmap)
+                if (addr >= 0x600000) {
+                    bitmap_clear(addr / PAGE_SIZE);
+                    free_pages++;
+                }
             }
         }
     }

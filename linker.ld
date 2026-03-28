@@ -6,8 +6,8 @@ ENTRY(kmain)
 
 SECTIONS
 {
-    /* Ubicación física y virtual del kernel */
-    . = 0xffffffff80000000;
+    /* Ubicación física y virtual del kernel (1MB para el cargador propio) */
+    . = 0x100000;
 
     .text :
     {

@@ -1,15 +1,16 @@
 # Configuración del Compilador
-# Puedes sobrescribir estas variables para compilación cruzada
 CC ?= gcc
 LD ?= ld
 
 KERNEL := kernel.elf
 
+# Eliminamos -mcmodel=kernel porque ahora el cargador es mas simple y
+# el kernel se carga en el primer 1MB (Identity mapped)
 CFLAGS := -Wall -Wextra -std=c11 -ffreestanding -fno-stack-protector -fno-stack-check \
           -fno-lto -fno-pie -fno-pic -m64 -march=x86-64 -mno-80387 -mno-mmx -mno-sse \
-          -mno-sse2 -mno-red-zone -mcmodel=kernel -I.
+          -mno-sse2 -mno-red-zone -I.
 
-LDFLAGS := -nostdlib -static -m elf_x86_64 -z max-page-size=0x1000 -T linker.ld
+LDFLAGS := -nostdlib -static -m elf_x86_64 -z max-page-size=0x1000 -T linker.ld --oformat binary
 
 C_SOURCES := $(shell find kernel -name '*.c') $(shell find common -name '*.c') $(shell find drivers -name '*.c')
 S_SOURCES := $(shell find kernel -name '*.s')
@@ -26,16 +27,23 @@ bootloader:
 $(KERNEL): $(OBJ)
 	$(LD) $(LDFLAGS) $(OBJ) -o $@
 
-carley-os.img: bootloader $(KERNEL)
-	# Crear una imagen de disco de 20MB llena de ceros
-	dd if=/dev/zero of=$@ bs=1M count=20
-	# Escribir el Stage 1 (MBR) en el primer sector (512 bytes)
+tools/pack_initrd: tools/pack_initrd.c
+	gcc $< -o $@
+
+initrd.bin: tools/pack_initrd userland
+	./tools/pack_initrd $@ user/*.elf user/libc.so
+
+carley-os.img: bootloader $(KERNEL) initrd.bin
+	# Crear una imagen de disco de 40MB llena de ceros
+	dd if=/dev/zero of=$@ bs=1M count=40
+	# Stage 1 (MBR) en sector 1
 	dd if=boot/boot.bin of=$@ conv=notrunc
-	# Escribir el Stage 2 justo después (Sector 2 en adelante)
+	# Stage 2 en sector 2
 	dd if=boot/stage2.bin of=$@ seek=1 conv=notrunc
-	# Escribir el Kernel en la posición 1MB (2048 sectores)
-	# Esto coincide con el salto 'jmp 0x100000' en stage2.asm
+	# Kernel en 1MB (Sector 2048)
 	dd if=$(KERNEL) of=$@ seek=2048 conv=notrunc
+	# Initrd en 10MB (Sector 20480)
+	dd if=initrd.bin of=$@ seek=20480 conv=notrunc
 
 userland:
 	$(MAKE) -C user

@@ -3,6 +3,7 @@
 #include <stdbool.h>
 
 static struct limine_framebuffer *framebuffer;
+static struct limine_framebuffer vbe_fb; // Estructura local para modo VBE
 static uint32_t cursor_x = 10;
 static uint32_t cursor_y = 10;
 #define CHAR_WIDTH 8
@@ -46,6 +47,15 @@ static const uint8_t font8x8_basic[128][8] = {
 };
 
 void video_init(struct limine_framebuffer *fb) { framebuffer = fb; }
+
+void video_init_vbe(uint64_t addr, uint32_t w, uint32_t h) {
+    vbe_fb.address = (void *)addr;
+    vbe_fb.width = w;
+    vbe_fb.height = h;
+    vbe_fb.pitch = w * 4;
+    vbe_fb.bpp = 32;
+    framebuffer = &vbe_fb;
+}
 
 void video_put_pixel(uint32_t x, uint32_t y, uint32_t color) {
     if (x >= framebuffer->width || y >= framebuffer->height) return;
