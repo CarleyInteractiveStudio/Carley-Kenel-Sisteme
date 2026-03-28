@@ -3,6 +3,7 @@
 
 stage2_start:
     cli
+    mov [boot_drive_saved], dl ; Guardar el disco de arranque
     xor ax, ax
     mov ds, ax
     mov es, ax
@@ -31,6 +32,47 @@ do_e820:
     jne do_e820
 e820_done:
 
+    ; 2.5 Cargar el Kernel (LBA 2048) a 1MB usando Unreal Mode
+    push ds
+    lgdt [unreal_gdt_ptr]
+    mov eax, cr0
+    or al, 1
+    mov cr0, eax
+    jmp $+2
+    mov bx, 0x08
+    mov ds, bx
+    mov es, bx
+    and al, 0xfe
+    mov cr0, eax
+    pop ds
+
+    ; Cargar 1024 sectores (512KB) del Kernel
+    mov edi, 0x100000 ; Destino: 1MB
+    mov ebx, 2048     ; Sector inicial en el disco
+    mov ecx, 1024     ; Cantidad de sectores
+
+load_kernel_loop:
+    push ecx
+    push edi
+    mov [dap_lba], ebx
+    mov si, dap
+    mov ah, 0x42
+    mov dl, [boot_drive_saved]
+    int 0x13
+    jc disk_error_halt
+
+    ; Copiar del buffer temporal (0x0000:0x1000) al destino final (EDI)
+    mov esi, 0x1000   ; Buffer temporal
+    mov ecx, 128      ; 512 bytes / 4
+    db 0x67           ; Prefijo para usar EDI de 32 bits
+    rep movsd
+
+    pop edi
+    add edi, 512
+    pop ecx
+    inc ebx
+    loop load_kernel_loop
+
     ; 3. Configurar Modo de Video VBE (1024x768x32)
     ;    Obtener información del modo 0x118 (1024x768x32)
     mov ax, 0x4f01
@@ -57,6 +99,12 @@ e820_done:
 video_error:
     mov ah, 0x0e
     mov al, 'V'
+    int 0x10
+    hlt
+
+disk_error_halt:
+    mov ah, 0x0e
+    mov al, 'D'
     int 0x10
     hlt
 
@@ -135,6 +183,25 @@ long_mode_start:
     jmp rax
 
 mem_count dw 0
+boot_drive_saved db 0
+
+; Estructura para lectura LBA (DAP)
+dap:
+    db 0x10
+    db 0
+    dw 1      ; Leer 1 sector a la vez
+    dw 0x1000 ; Buffer temporal (Offset)
+    dw 0x0000 ; Buffer temporal (Segmento)
+dap_lba:
+    dq 0      ; LBA se llena en el bucle
+
+; GDT para Modo Unreal
+unreal_gdt:
+    dq 0
+    dq 0x00cf92000000ffff ; Data segment (limit 4GB)
+unreal_gdt_ptr:
+    dw 15
+    dd unreal_gdt
 
 ; GDTs
 gdt_start:
