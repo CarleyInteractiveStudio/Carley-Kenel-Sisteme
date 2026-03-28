@@ -117,23 +117,27 @@ pm_start:
     mov esp, 0x90000
 
     ; 5. Preparar Paginación para Modo Largo (64-bit)
-    ;    Mapeamos el primer Gigabyte (Identity Mapping)
-    mov edi, 0x1000
+    ;    Mapeamos los primeros 4 Gigabytes (Identity Mapping) para cubrir el Framebuffer
+    mov edi, 0x10000
     mov cr3, edi
     xor eax, eax
-    mov ecx, 4096
+    mov ecx, 8192 ; Limpiar 8 páginas (PML4, PDPT y 4 PDs)
     rep stosd
 
-    mov dword [0x1000], 0x2003 ; PML4[0] -> PDPT
-    mov dword [0x2000], 0x3003 ; PDPT[0] -> PD
-    mov edi, 0x3000
-    mov eax, 0x00000083        ; 2MB Pages | Writable | Present
-    mov ecx, 512
-map_loop:
+    mov dword [0x10000], 0x11003 ; PML4[0] -> PDPT
+    mov dword [0x11000], 0x12003 ; PDPT[0] -> PD0
+    mov dword [0x11008], 0x13003 ; PDPT[1] -> PD1
+    mov dword [0x11010], 0x14003 ; PDPT[2] -> PD2
+    mov dword [0x11018], 0x15003 ; PDPT[3] -> PD3
+
+    mov edi, 0x12000 ; Inicio de PD0
+    mov eax, 0x00000083 ; 2MB Pages | Writable | Present
+    mov ecx, 2048 ; 512 * 4 = 2048 entradas (4GB)
+.map_loop_4gb:
     mov [edi], eax
     add eax, 0x200000
     add edi, 8
-    loop map_loop
+    loop .map_loop_4gb
 
     ; 6. Habilitar PAE y Long Mode
     mov eax, cr4
