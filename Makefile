@@ -60,11 +60,8 @@ iso: carley-os.img
 	@echo "Se recomienda usar carley-os.img como disco duro en VirtualBox."
 
 setup:
-	@echo "Configurando entorno de arranque..."
-	rm -rf limine
-	git clone https://github.com/limine-bootloader/limine.git --branch=v7.x-binary --depth=1
-	$(MAKE) -C limine
-	@echo "Entorno listo. Ya puedes ejecutar 'make iso'."
+	@echo "Entorno listo. Asegúrate de tener 'nasm' instalado."
+	@echo "Ejecuta: 'sudo apt install nasm xorriso mtools qemu-system-x86'"
 
 clean:
 	rm -rf $(OBJ) $(KERNEL) carley-kernel.iso carley-os.iso iso_root carley-disk.img

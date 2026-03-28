@@ -69,6 +69,22 @@ void draw_dashboard() {
         msg.data[1] += 8;
     }
 
+    // Battery Icon & Percentage (Top Right)
+    msg.type = COMPOSER_DRAW_RECT;
+    msg.data[0] = 680; msg.data[1] = 8; msg.data[2] = 20; msg.data[3] = 12;
+    msg.data[4] = 0xFF2ECC71; // Green
+    syscall3(SYS_IPC_SEND, 1, (long)&msg, 0);
+
+    msg.type = COMPOSER_DRAW_CHAR;
+    const char *bat_val = "85%";
+    msg.data[1] = 705; msg.data[2] = 10;
+    msg.data[3] = 0xFFFFFF;
+    for(int j=0; bat_val[j]; j++) {
+        msg.data[0] = bat_val[j];
+        syscall3(SYS_IPC_SEND, 1, (long)&msg, 0);
+        msg.data[1] += 8;
+    }
+
     // Active App Name
     msg.data[1] = 80; msg.data[2] = 10;
     msg.data[3] = 0xAAAAAA; // Gray for app name
