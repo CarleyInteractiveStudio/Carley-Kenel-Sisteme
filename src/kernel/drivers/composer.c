@@ -1,8 +1,8 @@
 #include "composer.h"
 #include "video.h"
-#include "kernel/sched.h"
-#include "kernel/ipc.h"
-#include "kernel/shm.h"
+#include "sched.h"
+#include "ipc.h"
+#include "shm.h"
 #include <stdbool.h>
 
 static wm_window_t windows[MAX_WINDOWS];

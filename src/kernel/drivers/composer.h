@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include "kernel/ipc.h"
+#include "ipc.h"
 
 #define COMPOSER_DRAW_PIXEL 1
 #define COMPOSER_DRAW_RECT  2

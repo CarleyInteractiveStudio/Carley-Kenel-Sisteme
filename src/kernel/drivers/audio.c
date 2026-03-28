@@ -1,5 +1,5 @@
 #include "audio.h"
-#include "kernel/io.h"
+#include "io.h"
 
 #define SB16_DSP_RESET  (SB16_BASE + 0x06)
 #define SB16_DSP_READ   (SB16_BASE + 0x0A)

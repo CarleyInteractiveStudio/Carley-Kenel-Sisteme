@@ -1,6 +1,6 @@
-#include "kernel/io.h"
-#include "kernel/ipc.h"
-#include "kernel/sched.h"
+#include "io.h"
+#include "ipc.h"
+#include "sched.h"
 #include "drivers/video.h"
 
 static uint8_t mouse_cycle = 0;

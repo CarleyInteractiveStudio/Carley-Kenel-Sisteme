@@ -1,6 +1,6 @@
 #include "battery.h"
 #include "acpi.h"
-#include "kernel/cpu.h"
+#include "cpu.h"
 
 // Para VirtualBox y hardware real, la bateria suele estar en el EC (Embedded Controller)
 // Por ahora simulamos una lectura base hasta implementar el AML Parser completo

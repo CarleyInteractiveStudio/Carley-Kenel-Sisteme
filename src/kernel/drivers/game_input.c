@@ -1,5 +1,5 @@
 #include "game_input.h"
-#include "kernel/keyboard_buf.h"
+#include "keyboard_buf.h"
 
 void game_input_update(controller_t *c) {
     /* Resetear estados momentáneos */

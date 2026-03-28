@@ -1,5 +1,5 @@
 #include "ide.h"
-#include "kernel/io.h"
+#include "io.h"
 
 /* Esperar a que el controlador esté listo */
 static void ide_wait_ready(void) {

@@ -1,5 +1,5 @@
 #include "pci.h"
-#include "kernel/cpu.h"
+#include "cpu.h"
 #include "string.h"
 
 #define PCI_CONFIG_ADDRESS 0xCF8

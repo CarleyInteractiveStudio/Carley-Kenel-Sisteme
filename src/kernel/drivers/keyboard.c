@@ -1,7 +1,7 @@
-#include "kernel/io.h"
-#include "kernel/ipc.h"
-#include "kernel/keyboard_buf.h"
-#include "kernel/sched.h" // Para ipc_msg_t
+#include "io.h"
+#include "ipc.h"
+#include "keyboard_buf.h"
+#include "sched.h" // Para ipc_msg_t
 #include "string.h"
 
 static const char scancode_to_ascii[] = {
