@@ -68,10 +68,21 @@ void vmm_init(boot_info_t *boot_info) {
         }
     }
 
-    // Kernel mapeado en 1MB (identity mapping)
-    for (uintptr_t i = 0x100000; i < 0x100000 + 0x2000000; i += PAGE_SIZE) {
+    // Kernel mapeado en 1MB y memoria esencial (0 a 33MB) para stacks y boot info
+    for (uintptr_t i = 0x0; i < 0x2100000; i += PAGE_SIZE) {
         vmm_map(kernel_pml4, i, i, PTE_PRESENT | PTE_WRITABLE);
     }
+
+    // Mapear el Framebuffer si está definido
+    if (boot_info->framebuffer_address != 0) {
+        uintptr_t fb_base = (boot_info->framebuffer_address / PAGE_SIZE) * PAGE_SIZE;
+        uint32_t fb_size = boot_info->screen_width * boot_info->screen_height * 4;
+        uint32_t fb_pages = (fb_size + PAGE_SIZE - 1) / PAGE_SIZE;
+        for (uint32_t i = 0; i < fb_pages; i++) {
+            vmm_map(kernel_pml4, fb_base + (i * PAGE_SIZE), fb_base + (i * PAGE_SIZE), PTE_PRESENT | PTE_WRITABLE);
+        }
+    }
+
     vmm_switch_pagemap(kernel_pml4);
 }
 

@@ -167,7 +167,7 @@ long_mode_start:
     ;    [0x6010]: Memory Map Address (8 bytes)
     ;    [0x6018]: Memory Map Count (4 bytes)
 
-    mov rax, [0x7000 + 40]    ; LFB Address de VBE Info
+    mov eax, [0x7000 + 40]    ; LFB Address de VBE Info (Offset 40 en struct vbe_mode_info)
     mov [0x6000], rax
     mov dword [0x6008], 1024
     mov dword [0x600c], 768
