@@ -45,7 +45,7 @@ typedef struct {
 void initrd_load_custom(void) {
     // Leer el sector 20480 (10MB) donde pusimos el initrd.bin en el Makefile
     uint8_t *buffer = kmalloc(512);
-    ide_read_sectors(0, 1, 20480, (uintptr_t)buffer);
+    ide_read_sectors(20480, 1, buffer);
 
     uint32_t file_count = *(uint32_t *)buffer;
     uint32_t current_sector = 20480;
@@ -57,7 +57,7 @@ void initrd_load_custom(void) {
         // Leer cabecera (68 bytes)
         if (offset_in_sector + sizeof(pack_header_t) > 512) {
             current_sector++;
-            ide_read_sectors(0, 1, current_sector, (uintptr_t)buffer);
+            ide_read_sectors(current_sector, 1, buffer);
             offset_in_sector = 0;
         }
         memcpy(&header, buffer + offset_in_sector, sizeof(pack_header_t));
@@ -81,7 +81,7 @@ void initrd_load_custom(void) {
 
             if (offset_in_sector >= 512 && bytes_loaded < header.size) {
                 current_sector++;
-                ide_read_sectors(0, 1, current_sector, (uintptr_t)buffer);
+                ide_read_sectors(current_sector, 1, buffer);
                 offset_in_sector = 0;
             }
         }
