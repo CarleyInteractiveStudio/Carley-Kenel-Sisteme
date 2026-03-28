@@ -28,8 +28,7 @@ extern void mouse_init(void);
 
 static void hlt(void) { for (;;) { __asm__("hlt"); } }
 
-// SMP deshabilitado temporalmente para el cargador custom
-// void ap_main(...) { ... }
+void kmain(boot_info_t *boot_info);
 
 void draw_splash(void) {
     video_clear(0x000000);
@@ -38,6 +37,7 @@ void draw_splash(void) {
     video_draw_rect(220, 230, 50, 10, 0x3498DB);
 }
 
+__attribute__((section(".text.head")))
 void kmain(boot_info_t *boot_info) {
     cpu_enable_features();
 

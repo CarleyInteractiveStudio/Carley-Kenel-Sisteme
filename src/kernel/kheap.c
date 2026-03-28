@@ -32,10 +32,13 @@ void kheap_init(void) {
 
 void *kmalloc(size_t size) {
     spin_lock(&heap_lock);
+    // Alinear tamaño a 16 bytes
+    size = (size + 15) & ~15;
+
     heap_node_t *curr = head;
     while (curr) {
         if (curr->free && curr->size >= size) {
-            if (curr->size > size + sizeof(heap_node_t) + 8) {
+            if (curr->size > size + sizeof(heap_node_t) + 16) {
                 heap_node_t *new_node = (heap_node_t *)((uint8_t *)curr + sizeof(heap_node_t) + size);
                 new_node->size = curr->size - size - sizeof(heap_node_t);
                 new_node->free = true;

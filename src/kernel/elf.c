@@ -9,7 +9,7 @@
 static int elf_load_into_pagemap(uint64_t *pagemap, uint8_t *buffer) {
     Elf64_Ehdr *ehdr = (Elf64_Ehdr *)buffer;
     Elf64_Phdr *phdrs = (Elf64_Phdr *)(buffer + ehdr->e_phoff);
-    uint64_t hhdm = 0;
+    uint64_t hhdm = HHDM_OFFSET;
 
     for (int i = 0; i < ehdr->e_phnum; i++) {
         if (phdrs[i].p_type == PT_LOAD) {

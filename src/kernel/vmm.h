@@ -10,6 +10,8 @@
 #define PTE_WRITABLE (1ULL << 1)
 #define PTE_USER (1ULL << 2)
 
+#define HHDM_OFFSET 0xFFFF800000000000ULL
+
 void vmm_init(boot_info_t *boot_info);
 void vmm_map(uint64_t *pml4, uintptr_t virt, uintptr_t phys, uint64_t flags);
 void vmm_unmap(uint64_t *pml4, uintptr_t virt);

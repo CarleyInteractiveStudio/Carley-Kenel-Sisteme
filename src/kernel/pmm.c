@@ -32,7 +32,7 @@ void pmm_init(void) {
 
 void pmm_init_custom(uint64_t map_addr, uint32_t count) {
     e820_entry_t *map = (e820_entry_t *)map_addr;
-    hhdm_offset = 0; // En nuestro cargador el kernel es identity mapped (0-4GB)
+    hhdm_offset = HHDM_OFFSET;
 
     uint64_t highest_address = 0;
     for (uint32_t i = 0; i < count; i++) {
@@ -111,7 +111,8 @@ void *pmm_alloc_pages(size_t count) {
 }
 
 void pmm_free_page(void *ptr) {
-    uint64_t index = (uint64_t)ptr / PAGE_SIZE;
+    uintptr_t addr = (uintptr_t)ptr;
+    uint64_t index = addr / PAGE_SIZE;
     if (index >= total_pages) return;
     spin_lock(&pmm_lock);
     if (bitmap_test(index)) {

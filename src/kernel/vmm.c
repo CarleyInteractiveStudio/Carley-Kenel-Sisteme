@@ -11,7 +11,7 @@ static uint64_t *kernel_pml4 = NULL;
 static spinlock_t vmm_lock = 0;
 
 static inline uint64_t get_hhdm_offset(void) {
-    return 0; // Identity mapped
+    return HHDM_OFFSET;
 }
 
 static inline void *phys_to_virt(uintptr_t phys) {
@@ -27,11 +27,12 @@ static uint64_t *get_next_table(uint64_t *table, uint64_t index, bool allocate) 
         return phys_to_virt(table[index] & ~0xFFFULL);
     }
     if (!allocate) return NULL;
-    void *new_table = pmm_alloc_page();
-    if (!new_table) return NULL;
-    memset(phys_to_virt((uintptr_t)new_table), 0, PAGE_SIZE);
-    table[index] = (uintptr_t)new_table | PTE_PRESENT | PTE_WRITABLE | PTE_USER;
-    return phys_to_virt((uintptr_t)new_table);
+    uintptr_t new_table_phys = (uintptr_t)pmm_alloc_page();
+    if (!new_table_phys) return NULL;
+    void *new_table_virt = phys_to_virt(new_table_phys);
+    memset(new_table_virt, 0, PAGE_SIZE);
+    table[index] = new_table_phys | PTE_PRESENT | PTE_WRITABLE | PTE_USER;
+    return new_table_virt;
 }
 
 uintptr_t virt_to_phys_in_pagemap(uint64_t *pml4, uintptr_t virt) {
@@ -58,29 +59,21 @@ void vmm_init(boot_info_t *boot_info) {
 
     uint64_t offset = get_hhdm_offset();
     e820_entry_t *memmap = (e820_entry_t *)boot_info->memory_map_address;
+
+    // 1. Mapear toda la memoria física en el HHDM
     for (uint32_t i = 0; i < boot_info->memory_map_count; i++) {
-        if (memmap[i].type == 1) { // Type 1 = Usable
-            uintptr_t base = (memmap[i].base / PAGE_SIZE) * PAGE_SIZE;
-            uint64_t length = ((memmap[i].length + PAGE_SIZE - 1) / PAGE_SIZE) * PAGE_SIZE;
-            for (uintptr_t j = 0; j < length; j += PAGE_SIZE) {
-                vmm_map(kernel_pml4, base + j + offset, base + j, PTE_PRESENT | PTE_WRITABLE);
-            }
+        uintptr_t base = (memmap[i].base / PAGE_SIZE) * PAGE_SIZE;
+        uint64_t length = ((memmap[i].length + PAGE_SIZE - 1) / PAGE_SIZE) * PAGE_SIZE;
+        for (uintptr_t j = 0; j < length; j += PAGE_SIZE) {
+            vmm_map(kernel_pml4, base + j + offset, base + j, PTE_PRESENT | PTE_WRITABLE);
         }
     }
 
-    // Kernel mapeado en 1MB y memoria esencial (0 a 33MB) para stacks y boot info
-    for (uintptr_t i = 0x0; i < 0x2100000; i += PAGE_SIZE) {
+    // 2. Identity Mapping de los primeros 4GB (para kernel, stacks, boot info y framebuffer inicial)
+    // Esto es necesario para que el código que aún usa direcciones físicas siga funcionando
+    // y para que la transición a modo largo sea fluida.
+    for (uintptr_t i = 0; i < 0x100000000ULL; i += PAGE_SIZE) {
         vmm_map(kernel_pml4, i, i, PTE_PRESENT | PTE_WRITABLE);
-    }
-
-    // Mapear el Framebuffer si está definido
-    if (boot_info->framebuffer_address != 0) {
-        uintptr_t fb_base = (boot_info->framebuffer_address / PAGE_SIZE) * PAGE_SIZE;
-        uint32_t fb_size = boot_info->screen_width * boot_info->screen_height * 4;
-        uint32_t fb_pages = (fb_size + PAGE_SIZE - 1) / PAGE_SIZE;
-        for (uint32_t i = 0; i < fb_pages; i++) {
-            vmm_map(kernel_pml4, fb_base + (i * PAGE_SIZE), fb_base + (i * PAGE_SIZE), PTE_PRESENT | PTE_WRITABLE);
-        }
     }
 
     vmm_switch_pagemap(kernel_pml4);
@@ -90,7 +83,14 @@ uint64_t *vmm_create_pagemap(void) {
     void *pml4_phys = pmm_alloc_page();
     uint64_t *pml4 = phys_to_virt((uintptr_t)pml4_phys);
     memset(pml4, 0, PAGE_SIZE);
+
+    // Copiar la mitad superior (Kernel & HHDM)
     for (int i = 256; i < 512; i++) pml4[i] = kernel_pml4[i];
+
+    // También copiamos la entrada 0 para mantener el Identity Mapping en procesos de usuario
+    // (Útil para acceder a estructuras de boot o framebuffer directamente si tienen permisos)
+    pml4[0] = kernel_pml4[0];
+
     return pml4;
 }
 

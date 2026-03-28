@@ -46,7 +46,7 @@ task_t *sched_create_task(void (*entry)(void), bool user) {
         new_task->pml4 = vmm_get_kernel_pagemap();
     }
 
-    uint64_t hhdm = 0;
+    uint64_t hhdm = HHDM_OFFSET;
     void *kstack_phys = pmm_alloc_pages(2);
     new_task->kernel_stack = (void *)((uintptr_t)kstack_phys + hhdm);
 

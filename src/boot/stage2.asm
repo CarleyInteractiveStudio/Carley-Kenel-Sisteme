@@ -125,6 +125,7 @@ pm_start:
     rep stosd
 
     mov dword [0x10000], 0x11003 ; PML4[0] -> PDPT
+    mov dword [0x10000 + 256*8], 0x11003 ; PML4[256] -> PDPT (HHDM 0xFFFF800000000000)
     mov dword [0x11000], 0x12003 ; PDPT[0] -> PD0
     mov dword [0x11008], 0x13003 ; PDPT[1] -> PD1
     mov dword [0x11010], 0x14003 ; PDPT[2] -> PD2

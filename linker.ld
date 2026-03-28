@@ -11,6 +11,7 @@ SECTIONS
 
     .text :
     {
+        *(.text.head)
         *(.text*)
     } :text
 
