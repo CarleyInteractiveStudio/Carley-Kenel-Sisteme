@@ -1,9 +1,13 @@
 [bits 16]
-[org 0x7E00]
+[org 0x1000]
 
 stage2_start:
-    ; Imprimir debug ultra-temprano: '1', '2', '3'
-    mov ah, 0x0e
+    ; Imprimir debug ultra-temprano: '!'
+    mov ax, 0x0e21 ; '!'
+    xor bx, bx
+    int 0x10
+
+    ; '1', '2', '3'
     mov al, '1'
     int 0x10
     mov al, '2'
