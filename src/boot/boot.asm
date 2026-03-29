@@ -17,10 +17,12 @@ start:
 
     ; Reiniciar disco
     xor ax, ax
+    mov dl, [boot_drive]
     int 0x13
 
     ; Cargar Stage 2 usando LBA extensions (más compatible con ISOs y discos modernos)
     mov si, dap_stage2
+    mov dl, [boot_drive]
     mov ah, 0x42
     int 0x13
     jnc jump_to_stage2

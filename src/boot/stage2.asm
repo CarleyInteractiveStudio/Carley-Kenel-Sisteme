@@ -2,6 +2,13 @@
 [org 0x8000]
 
 stage2_start:
+    ; Señal visual: Pantalla ROJA (Fase 1: Inicio Stage 2)
+    mov ax, 0x0700
+    mov bh, 0x4F
+    xor cx, cx
+    mov dx, 0x184F
+    int 0x10
+
     cli
     xor ax, ax
     mov ds, ax
@@ -68,6 +75,13 @@ load_kernel_loop:
     int 0x13
     jc disk_error_stage2
 
+    ; Señal visual: Pantalla VERDE (Fase 2: Cargando Kernel)
+    mov ax, 0x0700
+    mov bh, 0x2F
+    xor cx, cx
+    mov dx, 0x184F
+    int 0x10
+
     ; Copiar a memoria extendida usando modo protegido temporalmente (más seguro que unreal mode)
     cli
     push ds
@@ -90,8 +104,11 @@ pm_copy_kernel:
     mov ebp, edi
 
     ; Volver a modo real
-    ; Antes de volver, cargar selectores de 64KB para evitar problemas
-    mov ax, 0x18
+    ; Antes de volver, cargar selectores de 16-bit
+    jmp 0x18:pm_to_rm
+[bits 16]
+pm_to_rm:
+    mov ax, 0x20
     mov ds, ax
     mov es, ax
     mov ss, ax
@@ -99,7 +116,7 @@ pm_copy_kernel:
     mov eax, cr0
     and al, 0xFE
     mov cr0, eax
-    jmp 0x00:rm_copy_kernel
+    jmp 0x0000:rm_copy_kernel
 
 [bits 16]
 rm_copy_kernel:
@@ -123,6 +140,13 @@ rm_copy_kernel:
     int 0x10
     cmp ax, 0x004f
     jne video_error
+
+    ; Señal visual: Pantalla CYAN (Fase 3: Kernel en memoria, activando VBE)
+    mov ax, 0x0700
+    mov bh, 0x3F
+    xor cx, cx
+    mov dx, 0x184F
+    int 0x10
 
     ; Activar el modo de video
     mov ax, 0x4f02
@@ -168,7 +192,9 @@ pm_start:
     rep stosd
 
     mov dword [0x20000], 0x21003 ; PML4[0] -> PDPT (0x21000)
+    mov dword [0x20000 + 4], 0
     mov dword [0x21000], 0x22003 ; PDPT[0] -> PD (0x22000)
+    mov dword [0x21000 + 4], 0
     mov edi, 0x22000
     mov eax, 0x00000083        ; 2MB Pages | Writable | Present
     mov ecx, 512
@@ -201,6 +227,9 @@ long_mode_start:
     mov ds, ax
     mov es, ax
     mov ss, ax
+    mov fs, ax
+    mov gs, ax
+    mov rsp, 0x90000
 
     ; 7. Preparar la estructura Boot Info para el Kernel
     ;    La pondremos en 0x6000
@@ -251,7 +280,11 @@ dap_lba:
 
 ; GDTs
 gdt_start:
-    dq 0, 0x00cf9a000000ffff, 0x00cf92000000ffff, 0x000092000000ffff
+    dq 0                         ; Null
+    dq 0x00CF9A000000FFFF       ; Code 32 (0x08)
+    dq 0x00CF92000000FFFF       ; Data 32 (0x10)
+    dq 0x00009A000000FFFF       ; Code 16 (0x18)
+    dq 0x000092000000FFFF       ; Data 16 (0x20)
 gdt_end:
 gdt_ptr:
     dw gdt_end - gdt_start - 1
