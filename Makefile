@@ -21,11 +21,18 @@ OBJ := src/kernel/main.o $(filter-out src/kernel/main.o, $(C_SOURCES:.c=.o) $(S_
 
 all: bootloader $(KERNEL) userland carley-os.img
 
+# UEFI Loader CFLAGS
+UEFI_CFLAGS := -ffreestanding -fshort-wchar -mno-red-zone -fno-stack-protector \
+               -target x86_64-unknown-windows -c
+
 bootloader:
 	nasm -f bin src/boot/boot.asm -o src/boot/boot.bin
 	nasm -f bin src/boot/stage2.asm -o src/boot/stage2.bin
 	nasm -f bin src/boot/ap_trampoline.asm -o src/boot/ap_trampoline.bin
 	cat src/boot/boot.bin src/boot/stage2.bin > bootloader.bin
+	# Intentar compilar el cargador UEFI si gcc-mingw-w64 está disponible
+	-x86_64-w64-mingw32-gcc $(UEFI_CFLAGS) src/boot/uefi/main.c -o src/boot/uefi/main.o
+	-x86_64-w64-mingw32-gcc -nostdlib -Wl,-dll -shared -Wl,--subsystem,10 src/boot/uefi/main.o -o bootx64.efi
 
 $(KERNEL): $(OBJ)
 	$(LD) $(LDFLAGS) $(OBJ) -o $@
@@ -75,5 +82,5 @@ setup:
 	@echo "Ejecuta: 'sudo apt install nasm xorriso mtools qemu-system-x86'"
 
 clean:
-	rm -rf $(OBJ) $(KERNEL) src/boot/*.bin bootloader.bin carley-kernel.iso carley-os.iso carley-os.img initrd.bin meta/pack_initrd meta/format_carleyfs src/boot/ap_trampoline.bin
+	rm -rf $(OBJ) $(KERNEL) src/boot/*.bin bootloader.bin carley-kernel.iso carley-os.iso carley-os.img initrd.bin meta/pack_initrd meta/format_carleyfs src/boot/ap_trampoline.bin bootx64.efi src/boot/uefi/*.o
 	$(MAKE) -C src/user clean

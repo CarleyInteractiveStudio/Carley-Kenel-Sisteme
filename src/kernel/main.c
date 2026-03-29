@@ -59,6 +59,10 @@ void kmain(boot_info_t *boot_info) {
     cpu_init_local(0);
     gdt_init();
     idt_init();
+
+    // Inicializar ACPI con la dirección pasada por el cargador
+    acpi_init_custom(boot_info->rsdp_address);
+
     apic_init();
     smp_init();
 

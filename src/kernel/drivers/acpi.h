@@ -37,6 +37,7 @@ typedef struct {
 } __attribute__((packed)) fadt_t;
 
 void acpi_init(void);
+void acpi_init_custom(uint64_t rsdp_addr);
 void *acpi_find_table(const char *sig);
 
 #endif

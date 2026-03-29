@@ -9,6 +9,7 @@ typedef struct {
     uint32_t screen_height;
     uint64_t memory_map_address;
     uint32_t memory_map_count;
+    uint64_t rsdp_address; // Dirección de la tabla ACPI RSDP
 } __attribute__((packed)) boot_info_t;
 
 typedef struct {

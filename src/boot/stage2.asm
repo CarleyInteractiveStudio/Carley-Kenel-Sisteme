@@ -313,6 +313,22 @@ long_mode_start:
     mov eax, [mem_count_extended]
     mov [0x6018], eax
 
+    ; Buscar RSDP para pasarlo al Kernel
+    xor rbx, rbx
+    mov rsi, 0xE0000
+.search_rsdp:
+    mov rax, [rsi]
+    mov rdx, 0x2052545020445352 ; "RSD PTR "
+    cmp rax, rdx
+    je .found_rsdp
+    add rsi, 16
+    cmp rsi, 0xFFFFF
+    jb .search_rsdp
+    jmp .done_rsdp
+.found_rsdp:
+    mov [0x601C], rsi ; rsdp_address
+.done_rsdp:
+
     mov rdi, 0x6000
     ; El Kernel está linkeado en 0xFFFF800000100000
     mov rax, 0xFFFF800000100000
