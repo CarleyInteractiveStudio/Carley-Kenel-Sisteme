@@ -2,29 +2,21 @@
 [org 0x7E00]
 
 stage2_start:
-    ; Señal visual: Pantalla ROJA (Fase 1: Inicio Stage 2)
-    mov ax, 0x0700
-    mov bh, 0x4F
-    xor cx, cx
-    mov dx, 0x184F
-    int 0x10
-
     cli
     xor ax, ax
     mov ds, ax
     mov es, ax
-    mov [boot_drive], dl    ; Guardar unidad de arranque
+    mov [boot_drive], dl
 
-    ; 1. Habilitar la línea A20 (para acceder a toda la memoria)
+    ; 1. Habilitar la línea A20
     in al, 0x92
     or al, 2
     out 0x92, al
 
     ; 2. Detectar Mapa de Memoria BIOS (E820)
-    ;    Guardaremos el mapa en 0x9000
     mov di, 0x9000
     xor ebx, ebx
-    mov edx, 0x534D4150    ; 'SMAP'
+    mov edx, 0x534D4150
     mov dword [mem_count_extended], 0
 do_e820:
     mov eax, 0xe820
@@ -39,187 +31,219 @@ do_e820:
     jne do_e820
 e820_done:
 
-    ; Imprimir 'S' (Stage 2 started)
+    ; 3. Verificación de Hardware (CPUID Long Mode)
+    mov eax, 0x80000000
+    cpuid
+    cmp eax, 0x80000001
+    jb no_long_mode
+    mov eax, 0x80000001
+    cpuid
+    test edx, 1 << 29
+    jz no_long_mode
+
+    ; 4. Menú de Arranque
+    call clear_screen
+    mov si, msg_header
+    call print_string
+    mov si, msg_option1
+    call print_string
+    mov si, msg_option2
+    call print_string
+
+    mov cx, 5 ; 5 segundos
+boot_menu_loop:
+    mov si, msg_countdown
+    call print_string
+    mov al, cl
+    add al, '0'
     mov ah, 0x0e
-    mov al, 'S'
     int 0x10
 
-    ; 2.5 Cargar el Kernel desde el disco a 1MB
-    ; Detectar si estamos en CD (sector size 2048) o HDD (sector size 512)
-    ; Intentamos primero LBA 2048 (Disco Duro)
-    push ds
-    lgdt [gdt_ptr]
-    mov eax, cr0
-    or eax, 1
-    mov cr0, eax
-    jmp next_step
-next_step:
-    mov bx, 0x10 ; Selector de datos
-    mov ds, bx
-    mov es, bx
-    mov eax, cr0
-    and al, 0xFE
-    mov cr0, eax
-    pop ds
-    ; Ahora estamos en Unreal Mode.
+    mov ah, 0x01
+    int 0x16
+    jnz handle_key
 
-    ; Cargar el Kernel. Como int 0x13 no puede cargar por encima de 1MB,
-    ; cargamos en 0x2000:0x0000 (128KB) en trozos y movemos a 1MB (0x100000).
-    mov dword [kernel_sectors_left], 4096
-    mov dword [kernel_lba_current], 2048
-    mov edi, 0x100000
+    mov ah, 0x86
+    mov cx, 0x000F
+    mov dx, 0x4240
+    int 0x15
 
-load_kernel_loop:
-    ; Verificar si el primer sector que vamos a cargar tiene la firma mágica
-    cmp dword [kernel_sectors_left], 4096
-    jne perform_load
+    loop boot_menu_loop
+    jmp start_loading
 
-    ; Intentar encontrar el kernel en LBA 2048 (HDD)
-    mov dword [dap_lba], 2048
+handle_key:
+    mov ah, 0x00
+    int 0x16
+    cmp al, '1'
+    je start_loading
+    cmp al, '2'
+    je reboot_system
+    jmp boot_menu_loop
+
+no_long_mode:
+    mov si, msg_err_cpu
+    call print_string
+    jmp $
+
+reboot_system:
+    jmp 0xFFFF:0x0000
+
+start_loading:
+    call clear_screen
+    mov si, msg_loading
+    call print_string
+
+    ; 5. Cargar el Kernel desde CarleyFS
+    ; Leer Superbloque (LBA 1)
+    mov dword [dap_lba], 1
     mov word [dap_count], 1
-    mov word [dap_segment], 0x2000
-    mov si, dap
-    mov dl, [boot_drive]
-    mov ah, 0x42
-    int 0x13
-
-    ; Usar registro para evitar advertencias de tamaño en 16 bits
-    ; Buscamos en el offset 5 (el salto 'jmp kmain' ocupa 5 bytes)
-    mov ebx, 0x20005
-    mov eax, [ebx]
-    cmp eax, 0xC0DEB007
-    je found_hdd
-
-    ; Intentar encontrar el kernel en LBA 512 (CD-ROM)
-    mov dword [dap_lba], 512
-    mov si, dap
-    mov ah, 0x42
-    int 0x13
-
-    mov ebx, 0x20005
-    mov eax, [ebx]
-    cmp eax, 0xC0DEB007
-    je found_cd
-
-    ; Si no se encuentra, error fatal
-    jmp disk_error_stage2
-
-found_hdd:
-    mov dword [kernel_lba_current], 2048
-    jmp perform_load
-found_cd:
-    mov dword [kernel_lba_current], 512
-
-perform_load:
-    mov eax, [kernel_lba_current]
-    mov [dap_lba], eax
-    mov word [dap_count], 64
-    mov word [dap_segment], 0x2000
-
+    mov word [dap_segment], 0x0700 ; 0x7000
+    mov word [dap_offset], 0x0000
     mov si, dap
     mov dl, [boot_drive]
     mov ah, 0x42
     int 0x13
     jc disk_error_stage2
 
-    ; Señal visual: Pantalla VERDE (Fase 2: Cargando Kernel)
-    mov ax, 0x0700
-    mov bh, 0x2F
-    xor cx, cx
-    mov dx, 0x184F
-    int 0x10
+    mov eax, [0x7000]
+    cmp eax, 0xCA121E1
+    jne disk_error_stage2
 
-    ; Copiar a memoria extendida usando modo protegido temporalmente (más seguro que unreal mode)
-    cli
+    ; Leer Tabla de Inodos (LBA 2, 32 sectores) a 0x7200
+    mov dword [dap_lba], 2
+    mov word [dap_count], 32
+    mov word [dap_segment], 0x0720
+    mov si, dap
+    int 0x13
+    jc disk_error_stage2
+
+    ; Buscar "kernel"
+    mov si, 0x7200
+    mov cx, 64
+search_kernel:
+    push cx
+    mov di, kernel_name
+    mov cx, 6
+    push si
+    repe cmpsb
+    pop si
+    pop cx
+    je found_kernel_inode
+    add si, 80
+    loop search_kernel
+    jmp disk_error_stage2
+
+found_kernel_inode:
+    mov eax, [si + 64] ; size
+    mov dword [kernel_sectors_left_bytes], eax
+    mov eax, [si + 68] ; start
+    mov dword [kernel_lba_current], eax
+    mov edi, 0x100000
+
+    ; Entrar en Unreal Mode para cargar directamente a 1MB
     push ds
-    push es
     lgdt [gdt_ptr]
     mov eax, cr0
     or eax, 1
     mov cr0, eax
-    jmp 0x08:pm_copy_kernel
-
+    jmp 0x08:unreal_setup
 [bits 32]
-pm_copy_kernel:
-    mov ax, 0x10
-    mov ds, ax
-    mov es, ax
-    mov esi, 0x20000
-    ; Usamos EBP para guardar EDI a traves del cambio de modo
-    mov ecx, (64 * 512) / 4
-    rep movsd
-    mov ebp, edi
-
-    ; Volver a modo real
-    ; Antes de volver, cargar selectores de 16-bit
-    jmp 0x18:pm_to_rm
-[bits 16]
-pm_to_rm:
-    mov ax, 0x20
-    mov ds, ax
-    mov es, ax
-    mov ss, ax
-
+unreal_setup:
+    mov bx, 0x10
+    mov ds, bx
+    mov es, bx
     mov eax, cr0
     and al, 0xFE
     mov cr0, eax
-    jmp 0x0000:rm_copy_kernel
-
+    jmp 0x18:unreal_done
 [bits 16]
-rm_copy_kernel:
+unreal_done:
+    pop ds
+
+load_kernel_loop:
+    mov eax, [kernel_lba_current]
+    mov [dap_lba], eax
+    mov word [dap_count], 64
+    mov word [dap_segment], 0x2000
+    mov si, dap
+    mov dl, [boot_drive]
+    mov ah, 0x42
+    int 0x13
+    jc disk_error_stage2
+
+    mov ecx, (64 * 512) / 4
+    mov esi, 0x20000
+    rep movsd
+
+    add dword [kernel_lba_current], 64
+    cmp dword [kernel_sectors_left_bytes], (64 * 512)
+    jbe kernel_loaded
+    sub dword [kernel_sectors_left_bytes], (64 * 512)
+    jmp load_kernel_loop
+
+kernel_loaded:
     xor ax, ax
     mov ds, ax
     mov es, ax
-    mov edi, ebp
-    pop es
-    pop ds
-    sti
 
-    add dword [kernel_lba_current], 64
-    sub dword [kernel_sectors_left], 64
-    jnz load_kernel_loop
+    ; 6. Configurar Modo de Video VBE
+    mov si, msg_video_info
+    call print_string
 
-    ; 3. Configurar Modo de Video VBE (1024x768x32)
-    ;    Obtener información del modo 0x118 (1024x768x32)
+    ; Intentar 1024x768x32 (0x118)
     mov ax, 0x4f01
-    mov cx, 0x118          ; Modo 1024x768x32
-    mov di, 0x7000         ; Buffer para VBE Mode Info
+    mov cx, 0x118
+    mov di, 0x7000
     int 0x10
     cmp ax, 0x004f
-    jne video_error
+    je video_ok
 
-    ; Señal visual: Pantalla CYAN (Fase 3: Kernel en memoria, activando VBE)
-    mov ax, 0x0700
-    mov bh, 0x3F
-    xor cx, cx
-    mov dx, 0x184F
+    ; Fallback 800x600x32 (0x115)
+    mov cx, 0x115
     int 0x10
 
-    ; Activar el modo de video
+video_ok:
     mov ax, 0x4f02
-    mov bx, 0x4118         ; Modo 0x118 + bit 14 (Linear Framebuffer)
+    mov bx, cx
+    or bx, 0x4000 ; LFB
     int 0x10
-    cmp ax, 0x004f
-    jne video_error
 
-    ; 4. Preparar Paso a 32-bit (Modo Protegido)
+    ; 7. Paso a Modo Protegido
     lgdt [gdt_ptr]
     mov eax, cr0
     or eax, 1
     mov cr0, eax
     jmp 0x08:pm_start
 
-video_error:
-    mov ah, 0x0e
-    mov al, 'V'
-    int 0x10
+disk_error_stage2:
+    mov si, msg_err_disk
+    call print_string
     hlt
 
-disk_error_stage2:
-    mov ah, 0x0e
-    mov al, 'D'
+clear_screen:
+    mov ax, 0x03
     int 0x10
-    hlt
+    ret
+
+print_string:
+    mov ah, 0x0e
+.loop:
+    lodsb
+    test al, al
+    jz .done
+    int 0x10
+    jmp .loop
+.done:
+    ret
+
+msg_header db "--- CARLEY OS BOOTLOADER v2.0 ---", 13, 10, 0
+msg_option1 db "[1] Iniciar Carley OS", 13, 10, 0
+msg_option2 db "[2] Reiniciar", 13, 10, 0
+msg_countdown db 13, "Iniciando en: ", 0
+msg_loading db 13, 10, "Cargando sistema...", 13, 10, 0
+msg_video_info db "Configurando video...", 13, 10, 0
+msg_err_cpu db "ERROR: CPU no soporta 64-bit.", 0
+msg_err_disk db "ERROR: Kernel no encontrado en CarleyFS.", 0
 
 [bits 32]
 pm_start:
@@ -229,52 +253,41 @@ pm_start:
     mov ss, ax
     mov esp, 0x90000
 
-    ; 5. Preparar Paginación para Modo Largo (64-bit)
-    ;    Mapeamos el primer Gigabyte (Identity Mapping)
-    ;    Usamos 0x20000 como buffer seguro para las tablas (ya movimos el kernel de ahi)
+    ; 8. Paginación (4GB Identity Mapping)
     mov edi, 0x20000
     mov cr3, edi
     xor eax, eax
     mov ecx, 4096
     rep stosd
 
-    ; PML4[0] -> PDPT (0x21000)
-    mov dword [0x20000], 0x21003
-    mov dword [0x20000 + 4], 0
+    mov dword [0x20000], 0x21003 ; PML4[0]
 
-    ; PDPT[0,1,2,3] -> PDs (0x22000, 0x23000, 0x24000, 0x25000) para mapear 4GB
-    mov dword [0x21000], 0x22003
-    mov dword [0x21000 + 4], 0
-    mov dword [0x21008], 0x23003
-    mov dword [0x21008 + 4], 0
-    mov dword [0x21010], 0x24003
-    mov dword [0x21010 + 4], 0
-    mov dword [0x21018], 0x25003
-    mov dword [0x21018 + 4], 0
+    mov dword [0x21000], 0x22003 ; PDPT[0]
+    mov dword [0x21008], 0x23003 ; PDPT[1]
+    mov dword [0x21010], 0x24003 ; PDPT[2]
+    mov dword [0x21018], 0x25003 ; PDPT[3]
 
-    ; Rellenar las 4 tablas de directorio de páginas (512 entradas de 2MB cada una)
     mov edi, 0x22000
-    mov eax, 0x00000083        ; Base 0x0, 2MB Pages, Writable, Present
-    mov ecx, 2048              ; 512 * 4 = 2048 entradas (4GB totales)
-map_4gb_loop:
+    mov eax, 0x00000083 ; 2MB pages
+    mov ecx, 2048
+map_loop:
     mov [edi], eax
-    mov dword [edi + 4], 0     ; Asegurar bits altos en 0
-    add eax, 0x200000          ; Siguiente página de 2MB
+    add eax, 0x200000
     add edi, 8
-    loop map_4gb_loop
+    loop map_loop
 
-    ; 6. Habilitar PAE y Long Mode
+    ; 9. Long Mode
     mov eax, cr4
-    or eax, 1 << 5
+    or eax, 1 << 5 ; PAE
     mov cr4, eax
 
     mov ecx, 0xc0000080
     rdmsr
-    or eax, 1 << 8
+    or eax, 1 << 8 ; LME
     wrmsr
 
     mov eax, cr0
-    or eax, 1 << 31
+    or eax, 1 << 31 ; Paging
     mov cr0, eax
 
     lgdt [gdt_ptr_long]
@@ -286,20 +299,10 @@ long_mode_start:
     mov ds, ax
     mov es, ax
     mov ss, ax
-    mov fs, ax
-    mov gs, ax
-    mov rsp, 0x9FFFF ; Stack al final de los primeros 640KB
+    mov rsp, 0x9FFFF
 
-    ; 7. Preparar la estructura Boot Info para el Kernel
-    ;    La pondremos en 0x6000
-    ;    [0x6000]: Framebuffer Address (8 bytes)
-    ;    [0x6008]: Screen Width (4 bytes)
-    ;    [0x600c]: Screen Height (4 bytes)
-    ;    [0x6010]: Memory Map Address (8 bytes)
-    ;    [0x6018]: Memory Map Count (4 bytes)
-
-    xor rax, rax
-    mov eax, [0x7000 + 40]    ; LFB Address (32-bit)
+    ; Boot Info en 0x6000
+    mov eax, [0x7000 + 40] ; LFB
     mov [0x6000], rax
     mov dword [0x6008], 1024
     mov dword [0x600c], 768
@@ -307,59 +310,45 @@ long_mode_start:
     mov eax, [mem_count_extended]
     mov [0x6018], eax
 
-    ; Pasar el puntero de Boot Info en RDI (primer argumento de C)
     mov rdi, 0x6000
-
-    ; Imprimir 'K' (Kernel entry)
-    mov rax, 0x0F4B0F4B0F4B0F4B
-    mov [0xB8000], rax
-
-    ; Saltar al kernel en 1MB
     mov rax, 0x100000
     call rax
-
-    ; Si vuelve, detenerse
     jmp $
 
 mem_count_extended dd 0
 boot_drive db 0
-kernel_sectors_left dd 0
+kernel_sectors_left_bytes dd 0
+kernel_name db "kernel", 0
 kernel_lba_current dd 0
 
-; Disk Address Packet (DAP) para int 13h ah=42h
 align 4
 dap:
-    db 0x10          ; Tamaño del DAP
-    db 0             ; Reservado
+    db 0x10
+    db 0
 dap_count:
-    dw 0             ; Numero de sectores a leer
-    dw 0x0000        ; Offset del buffer
+    dw 0
+dap_offset:
+    dw 0x0000
 dap_segment:
-    dw 0x0000        ; Segmento del buffer
+    dw 0x0000
 dap_lba:
-    dq 0             ; LBA inicial
+    dq 0
 
-; Nota: Como cargar directamente a 1MB con int 13h es problematico en algunos BIOS,
-; cargaremos en 0x10000 (64KB) y luego moveremos a 1MB usando Unreal Mode.
-; Pero para simplificar y dado que el Kernel puede ser grande, usaremos una direccion segura.
-; Vamos a re-estructurar el DAP para cargar en 0x10000 y luego moverlo.
-
-; GDTs
 gdt_start:
-    dq 0                         ; Null
-    dq 0x00CF9A000000FFFF       ; Code 32 (0x08)
-    dq 0x00CF92000000FFFF       ; Data 32 (0x10)
-    dq 0x00009A000000FFFF       ; Code 16 (0x18)
-    dq 0x000092000000FFFF       ; Data 16 (0x20)
+    dq 0
+    dq 0x00CF9A000000FFFF ; Code 32
+    dq 0x00CF92000000FFFF ; Data 32
+    dq 0x00009A000000FFFF ; Code 16
+    dq 0x000092000000FFFF ; Data 16
 gdt_end:
 gdt_ptr:
     dw gdt_end - gdt_start - 1
     dd gdt_start
 
 gdt_start_long:
-    dq 0                         ; Null
-    dq 0x00AF9A000000FFFF       ; Code 64 (L bit set)
-    dq 0x00CF92000000FFFF       ; Data 64
+    dq 0
+    dq 0x00AF9A000000FFFF ; Code 64
+    dq 0x00CF92000000FFFF ; Data 64
 gdt_end_long:
 gdt_ptr_long:
     dw gdt_end_long - gdt_start_long - 1

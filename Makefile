@@ -32,18 +32,15 @@ $(KERNEL): $(OBJ)
 meta/pack_initrd: meta/pack_initrd.c
 	gcc $< -o $@
 
+meta/format_carleyfs: meta/format_carleyfs.cpp
+	g++ $< -o $@
+
 initrd.bin: meta/pack_initrd userland
 	./meta/pack_initrd $@ src/user/*.elf src/user/libc.so
 
-carley-os.img: bootloader $(KERNEL) initrd.bin
-	# Crear una imagen de disco de 40MB llena de ceros
-	dd if=/dev/zero of=$@ bs=1M count=40
-	# Cargador completo (Stage 1 + Stage 2) al principio
-	dd if=bootloader.bin of=$@ conv=notrunc
-	# Kernel en 1MB (Sector 2048)
-	dd if=$(KERNEL) of=$@ seek=2048 conv=notrunc
-	# Initrd en 10MB (Sector 20480)
-	dd if=initrd.bin of=$@ seek=20480 conv=notrunc
+carley-os.img: bootloader $(KERNEL) initrd.bin meta/format_carleyfs
+	# Generar imagen de disco con CarleyFS (Superbloque, Inodos y archivos)
+	./meta/format_carleyfs $@ bootloader.bin $(KERNEL) initrd.bin
 
 userland:
 	$(MAKE) -C src/user
@@ -77,5 +74,5 @@ setup:
 	@echo "Ejecuta: 'sudo apt install nasm xorriso mtools qemu-system-x86'"
 
 clean:
-	rm -rf $(OBJ) $(KERNEL) src/boot/*.bin bootloader.bin carley-kernel.iso carley-os.iso carley-os.img initrd.bin meta/pack_initrd
+	rm -rf $(OBJ) $(KERNEL) src/boot/*.bin bootloader.bin carley-kernel.iso carley-os.iso carley-os.img initrd.bin meta/pack_initrd meta/format_carleyfs
 	$(MAKE) -C src/user clean
