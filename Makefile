@@ -54,10 +54,16 @@ userland:
 %.o: %.s
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# Mantenemos el target iso por compatibilidad, pero ahora recomendamos carley-os.img
+# Target para generar una ISO booteable (BIOS/Legacy)
 iso: carley-os.img
-	@echo "AVISO: Se ha generado carley-os.img (imagen de disco duro)."
-	@echo "Se recomienda usar carley-os.img como disco duro en VirtualBox."
+	@echo "Generando carley-os.iso..."
+	mkdir -p iso_root
+	cp carley-os.img iso_root/
+	# Creamos la ISO usando la imagen de disco como sector de arranque El Torito
+	xorriso -as mkisofs -R -b carley-os.img -no-emul-boot -boot-load-size 4 -o carley-os.iso iso_root 2>/dev/null || \
+	(echo "Error: xorriso no encontrado. Instálalo con: sudo apt install xorriso" && rm -rf iso_root && exit 1)
+	rm -rf iso_root
+	@echo "¡ISO generada con éxito: carley-os.iso!"
 
 setup:
 	@echo "Entorno listo. Asegúrate de tener 'nasm' instalado."

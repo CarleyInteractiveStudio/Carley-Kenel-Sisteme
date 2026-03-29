@@ -59,8 +59,8 @@ next_step:
 load_kernel_loop:
     mov eax, [kernel_lba_current]
     mov [dap_lba], eax
-    mov word [dap_count], 64 ; Cargar 64 sectores (32KB) cada vez
-    mov word [dap_segment], 0x2000 ; Cargar en 0x2000:0x0000
+    mov word [dap_count], 64
+    mov word [dap_segment], 0x2000
 
     mov si, dap
     mov dl, [boot_drive]
@@ -68,18 +68,48 @@ load_kernel_loop:
     int 0x13
     jc disk_error_stage2
 
-    ; Mover de 0x20000 a EDI (usando Unreal Mode)
+    ; Copiar a memoria extendida usando modo protegido temporalmente (más seguro que unreal mode)
+    cli
     push ds
     push es
-    mov ax, 0x10 ; Selector de datos (4GB)
+    lgdt [gdt_ptr]
+    mov eax, cr0
+    or eax, 1
+    mov cr0, eax
+    jmp 0x08:pm_copy_kernel
+
+[bits 32]
+pm_copy_kernel:
+    mov ax, 0x10
     mov ds, ax
     mov es, ax
     mov esi, 0x20000
-    mov ecx, (64 * 512) / 4 ; Número de dwords a mover (REP usa CX/ECX)
-    db 0x67 ; Address size prefix (para usar ESI/EDI/ECX en modo real)
+    ; Usamos EBP para guardar EDI a traves del cambio de modo
+    mov ecx, (64 * 512) / 4
     rep movsd
+    mov ebp, edi
+
+    ; Volver a modo real
+    ; Antes de volver, cargar selectores de 64KB para evitar problemas
+    mov ax, 0x18
+    mov ds, ax
+    mov es, ax
+    mov ss, ax
+
+    mov eax, cr0
+    and al, 0xFE
+    mov cr0, eax
+    jmp 0x00:rm_copy_kernel
+
+[bits 16]
+rm_copy_kernel:
+    xor ax, ax
+    mov ds, ax
+    mov es, ax
+    mov edi, ebp
     pop es
     pop ds
+    sti
 
     add dword [kernel_lba_current], 64
     sub dword [kernel_sectors_left], 64
@@ -220,7 +250,7 @@ dap_lba:
 
 ; GDTs
 gdt_start:
-    dq 0, 0x00cf9a000000ffff, 0x00cf92000000ffff
+    dq 0, 0x00cf9a000000ffff, 0x00cf92000000ffff, 0x000092000000ffff
 gdt_end:
 gdt_ptr:
     dw gdt_end - gdt_start - 1
