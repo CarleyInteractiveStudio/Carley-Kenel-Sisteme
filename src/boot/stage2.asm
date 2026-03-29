@@ -45,6 +45,10 @@ e820_done:
     call clear_screen
     mov si, msg_header
     call print_string
+
+    mov ah, 0x0e
+    mov al, 'M'
+    int 0x10
     mov si, msg_option1
     call print_string
     mov si, msg_option2
@@ -92,6 +96,10 @@ start_loading:
     call clear_screen
     mov si, msg_loading
     call print_string
+
+    mov ah, 0x0e
+    mov al, 'L'
+    int 0x10
 
     ; 5. Cargar el Kernel desde CarleyFS
     ; Leer Superbloque (LBA 1)
@@ -206,6 +214,10 @@ video_ok:
     mov ax, 0x4f02
     mov bx, cx
     or bx, 0x4000 ; LFB
+    int 0x10
+
+    mov ah, 0x0e
+    mov al, 'V'
     int 0x10
 
     ; 7. Paso a Modo Protegido

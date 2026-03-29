@@ -17,5 +17,6 @@ typedef struct {
 
 void pci_init(void);
 pci_device_t *pci_find_device(uint8_t class, uint8_t subclass);
+uint32_t pci_read_config(uint8_t bus, uint8_t slot, uint8_t func, uint8_t offset);
 
 #endif

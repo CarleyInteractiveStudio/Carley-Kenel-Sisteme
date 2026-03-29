@@ -1,5 +1,5 @@
 #include "ahci.h"
-#include "pci.h"
+#include "drivers/pci.h"
 #include "vmm.h"
 #include "string.h"
 #include "drivers/video.h"

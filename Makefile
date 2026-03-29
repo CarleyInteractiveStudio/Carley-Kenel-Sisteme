@@ -8,14 +8,14 @@ KERNEL := kernel.elf
 # el kernel se carga en el primer 1MB (Identity mapped)
 CFLAGS := -Wall -Wextra -std=c11 -ffreestanding -fno-stack-protector -fno-stack-check \
           -fno-lto -fno-pie -fno-pic -m64 -march=x86-64 -mno-80387 -mno-mmx -mno-sse \
-          -mno-sse2 -mno-red-zone -Isrc/kernel -Icommon
+          -mno-sse2 -mno-red-zone -mcmodel=large -fcf-protection=none -Isrc/kernel -Icommon
 
 LDFLAGS := -nostdlib -static -m elf_x86_64 -z max-page-size=0x1000 -T linker.ld --oformat binary
 
 C_SOURCES := src/kernel/main.c $(filter-out src/kernel/main.c, $(shell find src/kernel -name '*.c')) $(shell find common -name '*.c')
 S_SOURCES := $(shell find src/kernel -name '*.s')
 # Explicitly place main.o first to ensure the magic signature is at the start of the binary
-OBJ := src/kernel/main.o $(filter-out src/kernel/main.o, $(C_SOURCES:.c=.o) $(S_SOURCES:.s=.o))
+OBJ := src/kernel/entry.o $(filter-out src/kernel/entry.o, $(C_SOURCES:.c=.o) $(S_SOURCES:.s=.o))
 
 .PHONY: all clean iso userland setup bootloader
 
