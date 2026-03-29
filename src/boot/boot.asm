@@ -15,8 +15,8 @@ normalize_cs:
     mov [boot_drive], dl
 
     ; Imprimir 'B' (Bootloader started)
-    mov ah, 0x0e
-    mov al, 'B'
+    mov ax, 0x0e42
+    xor bx, bx
     int 0x10
 
     ; Reiniciar disco
@@ -31,29 +31,39 @@ normalize_cs:
     int 0x13
     jnc jump_to_stage2
 
+    ; Imprimir 'F' (LBA failed)
+    mov ax, 0x0e46
+    xor bx, bx
+    int 0x10
+
     ; Fallback a CHS si LBA falla
     mov ah, 0x02
-    mov al, 31          ; Cargar 31 sectores (tras el MBR)
+    mov al, 31          ; Cargar 31 sectores
     mov ch, 0
     mov dh, 0
     mov cl, 2
-    mov bx, 0x7E00      ; Cargar justo tras el MBR
+    mov bx, 0x7E00      ; Offset 0x7E00
     mov dl, [boot_drive]
     int 0x13
     jc disk_error
 
 jump_to_stage2:
-    ; Imprimir 'J' (Jump to Stage 2)
-    mov ah, 0x0e
-    mov al, 'J'
+    ; Imprimir 'J' (Jump)
+    mov ax, 0x0e4a
+    xor bx, bx
+    int 0x10
+
+    ; Imprimir '>'
+    mov ax, 0x0e3e
+    xor bx, bx
     int 0x10
 
     mov dl, [boot_drive]
     jmp 0x0000:0x7E00
 
 disk_error:
-    mov ah, 0x0e
-    mov al, 'E'
+    mov ax, 0x0e45 ; 'E'
+    xor bx, bx
     int 0x10
     jmp $
 
@@ -63,7 +73,7 @@ align 16
 dap_stage2:
     db 0x10
     db 0
-    dw 31          ; 31 sectores (para que quepan en 16KB totales con el MBR)
+    dw 31          ; 31 sectores
     dw 0x7E00      ; Offset 0x7E00
     dw 0x0000      ; Segmento 0
     dq 1           ; Empezar en LBA 1

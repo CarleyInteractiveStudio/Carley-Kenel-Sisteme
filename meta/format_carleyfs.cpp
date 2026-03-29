@@ -71,7 +71,13 @@ int main(int argc, char **argv) {
         fread(buf, 1, size, f);
 
         uint32_t start = sb.next_free_sector;
-        fseek(img, start * 512, SEEK_SET);
+
+        // Sincronizar con el sector hardcodeado en el Kernel (initrd.c)
+        if (strcmp(name, "initrd") == 0) {
+            start = 20480;
+        }
+
+        fseek(img, (long)start * 512, SEEK_SET);
         fwrite(buf, 1, size, img);
 
         strncpy(inodes[sb.num_inodes].name, name, 63);
@@ -81,7 +87,11 @@ int main(int argc, char **argv) {
         inodes[sb.num_inodes].used = 1;
 
         sb.num_inodes++;
-        sb.next_free_sector += (size + 511) / 512;
+
+        // Solo avanzar el puntero secuencial si no es el initrd (zona especial)
+        if (start == sb.next_free_sector) {
+            sb.next_free_sector += (size + 511) / 512;
+        }
 
         free(buf);
         fclose(f);
