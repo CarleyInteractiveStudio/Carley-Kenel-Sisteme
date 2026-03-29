@@ -88,6 +88,7 @@ int main(int argc, char **argv) {
 
     add_file(argv[3], "kernel");
     if (argc > 4) add_file(argv[4], "initrd");
+    if (argc > 5) add_file(argv[5], "ap_trampoline");
 
     // Escribir Superbloque (LBA 1)
     fseek(img, 512, SEEK_SET);

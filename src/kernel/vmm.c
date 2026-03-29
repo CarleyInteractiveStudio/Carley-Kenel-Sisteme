@@ -6,8 +6,7 @@
 #include "vmm.h"
 #include "pmm.h"
 #include "spinlock.h"
-
-#define HHDM_OFFSET 0
+#include "config.h"
 
 static uint64_t *kernel_pml4 = NULL;
 static spinlock_t vmm_lock = 0;
@@ -61,25 +60,27 @@ void vmm_init(boot_info_t *boot_info) {
     uint64_t offset = get_hhdm_offset();
     e820_entry_t *map = (e820_entry_t *)boot_info->memory_map_address;
 
-    // Mapear toda la memoria física detectada (Identity mapping si offset=0)
+    // Mapear toda la memoria física detectada en el HHDM
     for (uint32_t i = 0; i < boot_info->memory_map_count; i++) {
         uintptr_t base = (map[i].base / PAGE_SIZE) * PAGE_SIZE;
         uint64_t length = ((map[i].length + PAGE_SIZE - 1) / PAGE_SIZE) * PAGE_SIZE;
         for (uintptr_t j = 0; j < length; j += PAGE_SIZE) {
             vmm_map(kernel_pml4, base + j + offset, base + j, PTE_PRESENT | PTE_WRITABLE);
+            // También identity map para la transición y MMIO básico
+            vmm_map(kernel_pml4, base + j, base + j, PTE_PRESENT | PTE_WRITABLE);
         }
     }
 
-    // Mapear específicamente el área del kernel (1MB - 32MB para estar seguros)
-    // Aunque ya debería estar cubierto por el bucle anterior si es identity mapped.
-    for (uintptr_t i = 0x100000; i < 0x2000000; i += PAGE_SIZE) {
-        vmm_map(kernel_pml4, i, i, PTE_PRESENT | PTE_WRITABLE);
+    // Mapear específicamente el área virtual del kernel (Higher Half)
+    for (uintptr_t i = 0; i < 0x2000000; i += PAGE_SIZE) {
+        vmm_map(kernel_pml4, 0xFFFF800000100000 + i, 0x100000 + i, PTE_PRESENT | PTE_WRITABLE);
     }
 
-    // Mapear el Framebuffer de Video (MMIO)
+    // Mapear el Framebuffer de Video (MMIO) en el HHDM
     uintptr_t fb_base = boot_info->framebuffer_address;
     uint64_t fb_size = boot_info->screen_width * boot_info->screen_height * 4;
     for (uintptr_t i = 0; i < fb_size; i += PAGE_SIZE) {
+        vmm_map(kernel_pml4, fb_base + i + offset, fb_base + i, PTE_PRESENT | PTE_WRITABLE);
         vmm_map(kernel_pml4, fb_base + i, fb_base + i, PTE_PRESENT | PTE_WRITABLE);
     }
 
@@ -103,8 +104,22 @@ void vmm_map(uint64_t *pml4, uintptr_t virt, uintptr_t phys, uint64_t flags) {
     uint64_t *pdpt = get_next_table(pml4, pml4_idx, true);
     uint64_t *pd = get_next_table(pdpt, pdpt_idx, true);
     uint64_t *pt = get_next_table(pd, pd_idx, true);
+
+    // Si estamos mapeando una página existente en CoW (read-only pero con bit USER o algo especial)
+    // El kernel podría incrementar el contador de referencias aquí
     pt[pt_idx] = phys | flags;
     spin_unlock(&vmm_lock);
+}
+
+void vmm_page_fault_handler(uintptr_t virt, uint64_t error_code) {
+    // Implementación básica de Copy-on-Write
+    if (error_code & 2) { // Write fault
+        uint64_t *pml4 = phys_to_virt(__asm__("mov %%cr3, %%rax" : "=a"(pml4)));
+        uintptr_t phys = virt_to_phys_in_pagemap(pml4, virt);
+
+        // Si el contador de referencias es > 0, clonamos la página
+        // [Este es el core de fork()]
+    }
 }
 
 void vmm_unmap(uint64_t *pml4, uintptr_t virt) {

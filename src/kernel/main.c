@@ -23,6 +23,9 @@
 #include "elf.h"
 #include "keyboard_buf.h"
 #include "cpu.h"
+#include "smp.h"
+#include "drivers/apic.h"
+#include "drivers/ahci.h"
 
 extern void mouse_init(void);
 
@@ -43,22 +46,28 @@ void kmain(boot_info_t *boot_info) {
     cpu_enable_features();
 
     // Inicializar video lo antes posible para ver si arranca
-    video_init_vbe(boot_info->framebuffer_address, boot_info->screen_width, boot_info->screen_height);
+    // Usamos el offset HHDM para acceder al framebuffer
+    video_init_vbe(boot_info->framebuffer_address + 0xFFFF800000000000, boot_info->screen_width, boot_info->screen_height);
     video_clear(0x0000FF); // Pantalla AZUL para depuración: el kernel ha empezado
 
     // Reemplazaremos pmm_init() para usar boot_info->memory_map_address
-    pmm_init_custom(boot_info->memory_map_address, boot_info->memory_map_count);
+    // El mapa de memoria está en 0x9000, accesible via HHDM o identity
+    pmm_init_custom(boot_info->memory_map_address + 0xFFFF800000000000, boot_info->memory_map_count);
     vmm_init(boot_info);
     kheap_init();
 
     cpu_init_local(0);
     gdt_init();
     idt_init();
+    apic_init();
+    smp_init();
+
     kbd_buf_init();
     sched_init();
     syscall_init();
     vfs_init();
     ide_init();
+    ahci_init();
     initrd_load_custom();
     vfs_mount(carleyfs_init());
     vfs_mount(ramfs_init());
@@ -83,7 +92,9 @@ void kmain(boot_info_t *boot_info) {
 
 void draw_splash(void) {
     video_clear(0x000000);
-    video_draw_string("CARLEY OS", 270, 200, 0xFFFFFF);
+    char cpu_msg[64];
+    sprintf(cpu_msg, "CARLEY OS - %d CORES DETECTED", smp_get_cpu_count());
+    video_draw_string(cpu_msg, 270, 200, 0xFFFFFF);
     video_draw_rect(220, 230, 200, 10, 0x555555);
     video_draw_rect(220, 230, 50, 10, 0x3498DB);
 }

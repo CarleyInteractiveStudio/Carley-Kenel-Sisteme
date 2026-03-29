@@ -24,6 +24,7 @@ all: bootloader $(KERNEL) userland carley-os.img
 bootloader:
 	nasm -f bin src/boot/boot.asm -o src/boot/boot.bin
 	nasm -f bin src/boot/stage2.asm -o src/boot/stage2.bin
+	nasm -f bin src/boot/ap_trampoline.asm -o src/boot/ap_trampoline.bin
 	cat src/boot/boot.bin src/boot/stage2.bin > bootloader.bin
 
 $(KERNEL): $(OBJ)
@@ -40,7 +41,7 @@ initrd.bin: meta/pack_initrd userland
 
 carley-os.img: bootloader $(KERNEL) initrd.bin meta/format_carleyfs
 	# Generar imagen de disco con CarleyFS (Superbloque, Inodos y archivos)
-	./meta/format_carleyfs $@ bootloader.bin $(KERNEL) initrd.bin
+	./meta/format_carleyfs $@ bootloader.bin $(KERNEL) initrd.bin src/boot/ap_trampoline.bin
 
 userland:
 	$(MAKE) -C src/user
@@ -74,5 +75,5 @@ setup:
 	@echo "Ejecuta: 'sudo apt install nasm xorriso mtools qemu-system-x86'"
 
 clean:
-	rm -rf $(OBJ) $(KERNEL) src/boot/*.bin bootloader.bin carley-kernel.iso carley-os.iso carley-os.img initrd.bin meta/pack_initrd meta/format_carleyfs
+	rm -rf $(OBJ) $(KERNEL) src/boot/*.bin bootloader.bin carley-kernel.iso carley-os.iso carley-os.img initrd.bin meta/pack_initrd meta/format_carleyfs src/boot/ap_trampoline.bin
 	$(MAKE) -C src/user clean

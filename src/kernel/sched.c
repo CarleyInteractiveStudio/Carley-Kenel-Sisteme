@@ -7,9 +7,10 @@
 #include "spinlock.h"
 #include "cpu.h"
 
+#include "config.h"
+
 #define STACK_SIZE (PAGE_SIZE * 2)
 #define DEFAULT_USER_HEAP_START 0x80000000000
-#define HHDM_OFFSET 0
 
 static task_t *task_list = NULL;
 static uint64_t next_id = 1;

@@ -5,8 +5,7 @@
 #include "elf.h"
 #include "sched.h"
 #include "string.h"
-
-#define HHDM_OFFSET 0
+#include "config.h"
 
 static int elf_load_into_pagemap(uint64_t *pagemap, uint8_t *buffer) {
     Elf64_Ehdr *ehdr = (Elf64_Ehdr *)buffer;

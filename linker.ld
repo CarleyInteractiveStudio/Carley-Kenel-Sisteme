@@ -6,10 +6,10 @@ ENTRY(kmain)
 
 SECTIONS
 {
-    /* Ubicación física y virtual del kernel (1MB para el cargador propio) */
-    . = 0x100000;
+    /* Ubicación física (1MB) y virtual del kernel (Higher Half 64-bit canonical) */
+    . = 0xFFFF800000100000;
 
-    .text :
+    .text : AT(0x100000)
     {
         *(.text*)
     } :text

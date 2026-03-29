@@ -253,14 +253,17 @@ pm_start:
     mov ss, ax
     mov esp, 0x90000
 
-    ; 8. Paginación (4GB Identity Mapping)
+    ; 8. Paginación (Higher Half Mappings)
     mov edi, 0x20000
     mov cr3, edi
     xor eax, eax
     mov ecx, 4096
     rep stosd
 
-    mov dword [0x20000], 0x21003 ; PML4[0]
+    ; PML4[0] -> Identity Map (0-512GB)
+    ; PML4[256] -> HHDM (0xFFFF800000000000)
+    mov dword [0x20000], 0x21003
+    mov dword [0x20000 + 256*8], 0x21003
 
     mov dword [0x21000], 0x22003 ; PDPT[0]
     mov dword [0x21008], 0x23003 ; PDPT[1]
@@ -311,7 +314,8 @@ long_mode_start:
     mov [0x6018], eax
 
     mov rdi, 0x6000
-    mov rax, 0x100000
+    ; El Kernel está linkeado en 0xFFFF800000100000
+    mov rax, 0xFFFF800000100000
     call rax
     jmp $
 
