@@ -23,6 +23,7 @@ all: bootloader $(KERNEL) userland carley-os.img
 bootloader:
 	nasm -f bin src/boot/boot.asm -o src/boot/boot.bin
 	nasm -f bin src/boot/stage2.asm -o src/boot/stage2.bin
+	cat src/boot/boot.bin src/boot/stage2.bin > bootloader.bin
 
 $(KERNEL): $(OBJ)
 	$(LD) $(LDFLAGS) $(OBJ) -o $@
@@ -36,10 +37,8 @@ initrd.bin: meta/pack_initrd userland
 carley-os.img: bootloader $(KERNEL) initrd.bin
 	# Crear una imagen de disco de 40MB llena de ceros
 	dd if=/dev/zero of=$@ bs=1M count=40
-	# Stage 1 (MBR) en sector 1
-	dd if=src/boot/boot.bin of=$@ conv=notrunc
-	# Stage 2 en sector 2
-	dd if=src/boot/stage2.bin of=$@ seek=1 conv=notrunc
+	# Cargador completo (Stage 1 + Stage 2) al principio
+	dd if=bootloader.bin of=$@ conv=notrunc
 	# Kernel en 1MB (Sector 2048)
 	dd if=$(KERNEL) of=$@ seek=2048 conv=notrunc
 	# Initrd en 10MB (Sector 20480)
@@ -55,19 +54,18 @@ userland:
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Target para generar una ISO booteable (BIOS/Legacy)
-iso: carley-os.img
+iso: carley-os.img bootloader
 	@echo "Generando carley-os.iso..."
 	mkdir -p iso_root
 	cp carley-os.img iso_root/
-	# Creamos la ISO usando la imagen de disco como sector de arranque El Torito
-	# Usamos flags mas robustos para BIOS
-	# Quitamos -boot-info-table para evitar errores con imagenes grandes
+	# Usamos carley-os.img como imagen de arranque El Torito
+	# BIOS cargará los primeros 32 sectores (Stage 1 + Stage 2) automáticamente
 	xorriso -as mkisofs \
 		-quiet \
 		-V "CARLEY_OS" \
 		-b carley-os.img \
 		-no-emul-boot \
-		-boot-load-size 4 \
+		-boot-load-size 32 \
 		-o carley-os.iso iso_root || \
 	(echo "Error: xorriso no encontrado o fallo al crear ISO." && rm -rf iso_root && exit 1)
 	rm -rf iso_root
@@ -78,5 +76,5 @@ setup:
 	@echo "Ejecuta: 'sudo apt install nasm xorriso mtools qemu-system-x86'"
 
 clean:
-	rm -rf $(OBJ) $(KERNEL) src/boot/*.bin carley-kernel.iso carley-os.iso carley-os.img initrd.bin meta/pack_initrd
+	rm -rf $(OBJ) $(KERNEL) src/boot/*.bin bootloader.bin carley-kernel.iso carley-os.iso carley-os.img initrd.bin meta/pack_initrd
 	$(MAKE) -C src/user clean

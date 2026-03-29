@@ -1,5 +1,5 @@
 [bits 16]
-[org 0x8000]
+[org 0x7E00]
 
 stage2_start:
     ; Señal visual: Pantalla ROJA (Fase 1: Inicio Stage 2)
@@ -34,17 +34,19 @@ do_e820:
     cmp eax, 0x534D4150
     jne e820_done
     add di, 24
-    inc word [mem_count]
+    inc dword [mem_count_extended]
     test ebx, ebx
     jne do_e820
 e820_done:
 
-    ; Imprimir 'S' (Stage 2)
+    ; Imprimir 'S' (Stage 2 started)
     mov ah, 0x0e
     mov al, 'S'
     int 0x10
 
     ; 2.5 Cargar el Kernel desde el disco a 1MB
+    ; Detectar si estamos en CD (sector size 2048) o HDD (sector size 512)
+    ; Intentamos primero LBA 2048 (Disco Duro)
     push ds
     lgdt [gdt_ptr]
     mov eax, cr0
@@ -63,11 +65,44 @@ next_step:
 
     ; Cargar el Kernel. Como int 0x13 no puede cargar por encima de 1MB,
     ; cargamos en 0x2000:0x0000 (128KB) en trozos y movemos a 1MB (0x100000).
-    mov dword [kernel_sectors_left], 4096 ; 4096 sectores = 2MB (mas seguro)
-    mov dword [kernel_lba_current], 2048 ; LBA inicial del Kernel
-    mov edi, 0x100000 ; Destino final
+    mov dword [kernel_sectors_left], 4096
+    mov dword [kernel_lba_current], 2048
+    mov edi, 0x100000
 
 load_kernel_loop:
+    ; Verificar si el primer sector que vamos a cargar tiene la firma mágica
+    cmp dword [kernel_sectors_left], 4096
+    jne perform_load
+
+    ; Intentar encontrar el kernel en LBA 2048 (HDD)
+    mov dword [dap_lba], 2048
+    mov word [dap_count], 1
+    mov word [dap_segment], 0x2000
+    mov si, dap
+    mov dl, [boot_drive]
+    mov ah, 0x42
+    int 0x13
+    cmp dword [0x20000], 0xC0DEB007
+    je found_hdd
+
+    ; Intentar encontrar el kernel en LBA 512 (CD-ROM)
+    mov dword [dap_lba], 512
+    mov si, dap
+    mov ah, 0x42
+    int 0x13
+    cmp dword [0x20000], 0xC0DEB007
+    je found_cd
+
+    ; Si no se encuentra, error fatal
+    jmp disk_error_stage2
+
+found_hdd:
+    mov dword [kernel_lba_current], 2048
+    jmp perform_load
+found_cd:
+    mov dword [kernel_lba_current], 512
+
+perform_load:
     mov eax, [kernel_lba_current]
     mov [dap_lba], eax
     mov word [dap_count], 64
@@ -195,17 +230,19 @@ pm_start:
     mov ecx, 4096
     rep stosd
 
-    mov dword [0x20000], 0x21003 ; PML4[0] -> PDPT (0x21000)
-    mov dword [0x20000 + 4], 0
     ; PML4[0] -> PDPT (0x21000)
     mov dword [0x20000], 0x21003
     mov dword [0x20000 + 4], 0
 
     ; PDPT[0,1,2,3] -> PDs (0x22000, 0x23000, 0x24000, 0x25000) para mapear 4GB
     mov dword [0x21000], 0x22003
+    mov dword [0x21000 + 4], 0
     mov dword [0x21008], 0x23003
+    mov dword [0x21008 + 4], 0
     mov dword [0x21010], 0x24003
+    mov dword [0x21010 + 4], 0
     mov dword [0x21018], 0x25003
+    mov dword [0x21018 + 4], 0
 
     ; Rellenar las 4 tablas de directorio de páginas (512 entradas de 2MB cada una)
     mov edi, 0x22000
@@ -265,15 +302,18 @@ long_mode_start:
     ; Pasar el puntero de Boot Info en RDI (primer argumento de C)
     mov rdi, 0x6000
 
-    ; Imprimir 'K' (Entering Kernel)
-    mov rax, 0x0F4B0F4B0F4B0F4B ; 'K' en video modo texto
+    ; Imprimir 'K' (Kernel entry)
+    mov rax, 0x0F4B0F4B0F4B0F4B
     mov [0xB8000], rax
 
     ; Saltar al kernel en 1MB
     mov rax, 0x100000
-    jmp rax
+    call rax
 
-mem_count dw 0
+    ; Si vuelve, detenerse
+    jmp $
+
+mem_count_extended dd 0
 boot_drive db 0
 kernel_sectors_left dd 0
 kernel_lba_current dd 0
@@ -309,7 +349,9 @@ gdt_ptr:
     dd gdt_start
 
 gdt_start_long:
-    dq 0, 0x00209a0000000000, 0x0000920000000000
+    dq 0                         ; Null
+    dq 0x00AF9A000000FFFF       ; Code 64 (L bit set)
+    dq 0x00CF92000000FFFF       ; Data 64
 gdt_end_long:
 gdt_ptr_long:
     dw gdt_end_long - gdt_start_long - 1

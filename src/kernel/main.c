@@ -34,6 +34,9 @@ static void hlt(void) { for (;;) { __asm__("hlt"); } }
 void kmain(boot_info_t *boot_info);
 void draw_splash(void);
 
+// Firma mágica para que el cargador encuentre el kernel (0xC0DEB007)
+__asm__(".long 0xC0DEB007");
+
 void kmain(boot_info_t *boot_info) {
     cpu_enable_features();
 

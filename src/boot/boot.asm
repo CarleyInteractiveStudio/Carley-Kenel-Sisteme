@@ -11,56 +11,45 @@ normalize_cs:
     mov ss, ax
     mov sp, 0x7c00
 
-    ; Guardar el número de unidad de arranque pasado por BIOS en DL
+    ; Guardar el número de unidad de arranque
     mov [boot_drive], dl
 
-    ; Imprimir 'B' (Bootloader)
+    ; Imprimir 'B' (Bootloader started)
     mov ah, 0x0e
     mov al, 'B'
     int 0x10
-
-    ; Pasar el numero de unidad en DL al Stage 2
-    mov dl, [boot_drive]
 
     ; Reiniciar disco
     xor ax, ax
     mov dl, [boot_drive]
     int 0x13
 
-    ; Imprimir 'L' (Loading)
-    mov ah, 0x0e
-    mov al, 'L'
-    int 0x10
-
-    ; Cargar Stage 2 usando LBA extensions (más compatible con ISOs y discos modernos)
+    ; Cargar Stage 2 usando LBA extensions
     mov si, dap_stage2
-    mov dl, [boot_drive]
     mov ah, 0x42
+    mov dl, [boot_drive]
     int 0x13
     jnc jump_to_stage2
 
     ; Fallback a CHS si LBA falla
-    mov dl, [boot_drive]
     mov ah, 0x02
-    mov al, 32
+    mov al, 31          ; Cargar 31 sectores (tras el MBR)
     mov ch, 0
     mov dh, 0
     mov cl, 2
-    mov bx, 0x8000
+    mov bx, 0x7E00      ; Cargar justo tras el MBR
+    mov dl, [boot_drive]
     int 0x13
     jc disk_error
 
 jump_to_stage2:
-    ; Imprimir '2' (Jump to Stage 2)
+    ; Imprimir 'J' (Jump to Stage 2)
     mov ah, 0x0e
-    mov al, '2'
+    mov al, 'J'
     int 0x10
 
-    ; Pasar unidad de arranque en DL
     mov dl, [boot_drive]
-
-    ; Saltar al Stage 2
-    jmp 0x0000:0x8000
+    jmp 0x0000:0x7E00
 
 disk_error:
     mov ah, 0x0e
@@ -70,14 +59,14 @@ disk_error:
 
 boot_drive db 0
 
-align 4
+align 16
 dap_stage2:
     db 0x10
     db 0
-    dw 32          ; 32 sectores
-    dw 0x8000      ; Offset 0x8000
+    dw 31          ; 31 sectores (para que quepan en 16KB totales con el MBR)
+    dw 0x7E00      ; Offset 0x7E00
     dw 0x0000      ; Segmento 0
-    dq 1           ; Empezar en LBA 1 (justo tras el MBR)
+    dq 1           ; Empezar en LBA 1
 
 times 510-($-$$) db 0
 dw 0xaa55
