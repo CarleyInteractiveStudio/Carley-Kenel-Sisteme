@@ -23,6 +23,9 @@
 #include "elf.h"
 #include "keyboard_buf.h"
 #include "cpu.h"
+#include "smp.h"
+#include "drivers/apic.h"
+#include "drivers/ahci.h"
 
 extern void mouse_init(void);
 
@@ -31,29 +34,44 @@ static void hlt(void) { for (;;) { __asm__("hlt"); } }
 // SMP deshabilitado temporalmente para el cargador custom
 // void ap_main(...) { ... }
 
-void draw_splash(void) {
-    video_clear(0x000000);
-    video_draw_string("CARLEY OS", 270, 200, 0xFFFFFF);
-    video_draw_rect(220, 230, 200, 10, 0x555555);
-    video_draw_rect(220, 230, 50, 10, 0x3498DB);
-}
+void kmain(boot_info_t *boot_info);
+void draw_splash(void);
+
+// Firma mágica para que el cargador encuentre el kernel (0xC0DEB007)
+// Saltamos sobre la firma para que no se ejecute como código
+__asm__("jmp kmain");
+__asm__(".long 0xC0DEB007");
 
 void kmain(boot_info_t *boot_info) {
     cpu_enable_features();
 
+    // Inicializar video lo antes posible para ver si arranca
+    // Usamos el offset HHDM para acceder al framebuffer
+    video_init_vbe(boot_info->framebuffer_address + 0xFFFF800000000000, boot_info->screen_width, boot_info->screen_height);
+    video_clear(0x0000FF); // Pantalla AZUL para depuración: el kernel ha empezado
+
     // Reemplazaremos pmm_init() para usar boot_info->memory_map_address
-    pmm_init_custom(boot_info->memory_map_address, boot_info->memory_map_count);
-    vmm_init();
+    // El mapa de memoria está en 0x9000, accesible via HHDM o identity
+    pmm_init_custom(boot_info->memory_map_address + 0xFFFF800000000000, boot_info->memory_map_count);
+    vmm_init(boot_info);
     kheap_init();
 
     cpu_init_local(0);
     gdt_init();
     idt_init();
+
+    // Inicializar ACPI con la dirección pasada por el cargador
+    acpi_init_custom(boot_info->rsdp_address);
+
+    apic_init();
+    smp_init();
+
     kbd_buf_init();
     sched_init();
     syscall_init();
     vfs_init();
     ide_init();
+    ahci_init();
     initrd_load_custom();
     vfs_mount(carleyfs_init());
     vfs_mount(ramfs_init());
@@ -62,8 +80,7 @@ void kmain(boot_info_t *boot_info) {
     pit_init(100);
     sched_create_task(audio_mixer_step, false);
 
-    // Inicializar video usando la dirección lineal de VBE
-    video_init_vbe(boot_info->framebuffer_address, boot_info->screen_width, boot_info->screen_height);
+    // Dibujar splash
     draw_splash();
     video_clear(0x1E1E1E);
     mouse_init();
@@ -75,4 +92,13 @@ void kmain(boot_info_t *boot_info) {
 
     __asm__ volatile("sti");
     for (;;) hlt();
+}
+
+void draw_splash(void) {
+    video_clear(0x000000);
+    char cpu_msg[64];
+    sprintf(cpu_msg, "CARLEY OS - %d CORES DETECTED", smp_get_cpu_count());
+    video_draw_string(cpu_msg, 270, 200, 0xFFFFFF);
+    video_draw_rect(220, 230, 200, 10, 0x555555);
+    video_draw_rect(220, 230, 50, 10, 0x3498DB);
 }

@@ -66,3 +66,5 @@ isr_common_stub:
     add $16, %rsp
 
     iretq
+
+.section .note.GNU-stack,"",@progbits

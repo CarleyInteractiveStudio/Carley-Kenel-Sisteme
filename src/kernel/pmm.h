@@ -21,6 +21,9 @@ void *pmm_alloc_pages(size_t count);
 /* Libera una página física en la dirección dada */
 void pmm_free_page(void *ptr);
 
+/* Referenciar una página física (CoW) */
+void pmm_ref_page(void *ptr);
+
 /* Libera 'count' páginas contiguas empezando por 'ptr' */
 void pmm_free_pages(void *ptr, size_t count);
 

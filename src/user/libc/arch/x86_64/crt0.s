@@ -1,5 +1,6 @@
 .section .text
 .global _start
+.type _start, @function
 .extern main
 
 _start:
@@ -15,3 +16,6 @@ _start:
     int $0x80
 
     1: jmp 1b
+.size _start, .-_start
+
+.section .note.GNU-stack,"",@progbits

@@ -1,14 +1,11 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
-#include "limine.h"
 #include "boot_info.h"
 #include "string.h"
 #include "pmm.h"
 #include "spinlock.h"
-
-extern volatile struct limine_memmap_request memmap_request;
-extern volatile struct limine_hhdm_request hhdm_request;
+#include "config.h"
 
 static uint8_t *bitmap = NULL;
 static uint64_t total_pages = 0;
@@ -16,6 +13,8 @@ static uint64_t free_pages = 0;
 static uint64_t last_index = 0;
 static uint64_t hhdm_offset = 0;
 static spinlock_t pmm_lock = 0;
+
+static uint16_t *ref_counts = NULL;
 
 static inline void bitmap_set(uint64_t index) {
     bitmap[index / 8] |= (1 << (index % 8));
@@ -30,8 +29,7 @@ static inline bool bitmap_test(uint64_t index) {
 }
 
 void pmm_init(void) {
-    // Obsoleto, redirigimos a la version custom si Limine no esta presente
-    // En un sistema real, Limine rellenaria las estructuras, pero aqui usamos el cargador Carley
+    // Obsoleto en el cargador Carley. Usamos pmm_init_custom.
 }
 
 void pmm_init_custom(uint64_t map_addr, uint32_t count) {
@@ -52,8 +50,12 @@ void pmm_init_custom(uint64_t map_addr, uint32_t count) {
 
     // Buscar sitio para el bitmap. Usaremos los primeros 1MB libres despues del Kernel
     // El kernel esta en 0x100000. Pondremos el bitmap en 0x500000 (5MB) para estar seguros.
-    bitmap = (uint8_t *)0x500000;
+    bitmap = (uint8_t *)(0x500000 + HHDM_OFFSET);
     memset(bitmap, 0xff, bitmap_size);
+
+    // Reservar espacio para los contadores de referencia (2 bytes por página)
+    ref_counts = (uint16_t *)(0x600000 + HHDM_OFFSET);
+    memset(ref_counts, 0, total_pages * 2);
 
     for (uint32_t i = 0; i < count; i++) {
         if (map[i].type == 1) {
@@ -114,14 +116,27 @@ void *pmm_alloc_pages(size_t count) {
     return NULL;
 }
 
+void pmm_ref_page(void *ptr) {
+    uint64_t index = (uint64_t)ptr / PAGE_SIZE;
+    if (index >= total_pages) return;
+    spin_lock(&pmm_lock);
+    ref_counts[index]++;
+    spin_unlock(&pmm_lock);
+}
+
 void pmm_free_page(void *ptr) {
     uint64_t index = (uint64_t)ptr / PAGE_SIZE;
     if (index >= total_pages) return;
     spin_lock(&pmm_lock);
-    if (bitmap_test(index)) {
-        bitmap_clear(index);
-        free_pages++;
-        if (index < last_index) last_index = index;
+
+    if (ref_counts[index] > 0) {
+        ref_counts[index]--;
+    } else {
+        if (bitmap_test(index)) {
+            bitmap_clear(index);
+            free_pages++;
+            if (index < last_index) last_index = index;
+        }
     }
     spin_unlock(&pmm_lock);
 }

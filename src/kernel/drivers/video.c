@@ -2,8 +2,16 @@
 #include "string.h"
 #include <stdbool.h>
 
-static struct limine_framebuffer *framebuffer;
-static struct limine_framebuffer vbe_fb; // Estructura local para modo VBE
+typedef struct {
+    void *address;
+    uint64_t width;
+    uint64_t height;
+    uint64_t pitch;
+    uint16_t bpp;
+} internal_fb_t;
+
+static internal_fb_t *framebuffer;
+static internal_fb_t vbe_fb; // Estructura local para modo VBE
 static uint32_t cursor_x = 10;
 static uint32_t cursor_y = 10;
 #define CHAR_WIDTH 8
@@ -46,7 +54,7 @@ static const uint8_t font8x8_basic[128][8] = {
     ['>'] = {0x18, 0x0C, 0x06, 0x03, 0x06, 0x0C, 0x18, 0x00},
 };
 
-void video_init(struct limine_framebuffer *fb) { framebuffer = fb; }
+void video_init(void *fb) { framebuffer = (internal_fb_t *)fb; }
 
 void video_init_vbe(uint64_t addr, uint32_t w, uint32_t h) {
     vbe_fb.address = (void *)addr;

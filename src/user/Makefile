@@ -39,8 +39,11 @@ cpython.elf: cpython.o $(LIBC_A)
 %.elf: %.o $(LIBC_A)
 	$(CC) $(LDFLAGS_STATIC) -T linker.ld $< $(LIBC_A) -o $@
 
-hello_dyn.elf: hello.o $(LIBC_SO)
-	$(CC) -nostdlib -T linker.ld hello.o $(LIBC_SO) -Wl,--dynamic-linker=/ldso.elf -o $@
+hello_dyn.elf: hello.o libc/arch/x86_64/crt0.o $(LIBC_SO)
+	$(CC) -nostdlib -T linker.ld libc/arch/x86_64/crt0.o hello.o $(LIBC_SO) -Wl,--dynamic-linker=/ldso.elf -o $@
+
+dashboard.elf: dashboard.o libc/arch/x86_64/crt0.o $(LIBC_SO)
+	$(CC) -nostdlib -T linker.ld libc/arch/x86_64/crt0.o dashboard.o $(LIBC_SO) -Wl,--dynamic-linker=/ldso.elf -o $@
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@

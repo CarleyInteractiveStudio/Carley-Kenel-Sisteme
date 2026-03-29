@@ -3,6 +3,8 @@
 #include <stdlib.h>
 #include <gui.h>
 
+extern long syscall3(int num, long arg1, long arg2, long arg3);
+
 /* Carley Script v0.2 - Modern UI Support */
 
 gui_window_t *current_win = NULL;

@@ -20,3 +20,7 @@ build/
 dist/
 bin/
 tmp/
+
+# Build Tools
+meta/format_carleyfs
+meta/pack_initrd
