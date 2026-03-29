@@ -39,8 +39,12 @@ do_e820:
     jne do_e820
 e820_done:
 
+    ; Imprimir 'S' (Stage 2)
+    mov ah, 0x0e
+    mov al, 'S'
+    int 0x10
+
     ; 2.5 Cargar el Kernel desde el disco a 1MB
-    ; Usaremos "Unreal Mode" para copiar datos por encima de 1MB en modo real
     push ds
     lgdt [gdt_ptr]
     mov eax, cr0
@@ -59,7 +63,7 @@ next_step:
 
     ; Cargar el Kernel. Como int 0x13 no puede cargar por encima de 1MB,
     ; cargamos en 0x2000:0x0000 (128KB) en trozos y movemos a 1MB (0x100000).
-    mov dword [kernel_sectors_left], 2048 ; 2048 sectores = 1MB (tamaño máximo kernel aprox)
+    mov dword [kernel_sectors_left], 4096 ; 4096 sectores = 2MB (mas seguro)
     mov dword [kernel_lba_current], 2048 ; LBA inicial del Kernel
     mov edi, 0x100000 ; Destino final
 
@@ -229,7 +233,7 @@ long_mode_start:
     mov ss, ax
     mov fs, ax
     mov gs, ax
-    mov rsp, 0x90000
+    mov rsp, 0x9FFFF ; Stack al final de los primeros 640KB
 
     ; 7. Preparar la estructura Boot Info para el Kernel
     ;    La pondremos en 0x6000

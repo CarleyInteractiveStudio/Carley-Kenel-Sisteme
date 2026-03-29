@@ -2,6 +2,8 @@
 [org 0x7c00]
 
 start:
+    jmp 0x0000:normalize_cs
+normalize_cs:
     cli
     xor ax, ax
     mov ds, ax
@@ -12,6 +14,11 @@ start:
     ; Guardar el número de unidad de arranque pasado por BIOS en DL
     mov [boot_drive], dl
 
+    ; Imprimir 'B' (Bootloader)
+    mov ah, 0x0e
+    mov al, 'B'
+    int 0x10
+
     ; Pasar el numero de unidad en DL al Stage 2
     mov dl, [boot_drive]
 
@@ -19,6 +26,11 @@ start:
     xor ax, ax
     mov dl, [boot_drive]
     int 0x13
+
+    ; Imprimir 'L' (Loading)
+    mov ah, 0x0e
+    mov al, 'L'
+    int 0x10
 
     ; Cargar Stage 2 usando LBA extensions (más compatible con ISOs y discos modernos)
     mov si, dap_stage2
@@ -39,8 +51,16 @@ start:
     jc disk_error
 
 jump_to_stage2:
+    ; Imprimir '2' (Jump to Stage 2)
+    mov ah, 0x0e
+    mov al, '2'
+    int 0x10
+
+    ; Pasar unidad de arranque en DL
+    mov dl, [boot_drive]
+
     ; Saltar al Stage 2
-    jmp 0x8000
+    jmp 0x0000:0x8000
 
 disk_error:
     mov ah, 0x0e

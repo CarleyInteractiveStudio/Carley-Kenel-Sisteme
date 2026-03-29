@@ -76,6 +76,13 @@ void vmm_init(boot_info_t *boot_info) {
         vmm_map(kernel_pml4, i, i, PTE_PRESENT | PTE_WRITABLE);
     }
 
+    // Mapear el Framebuffer de Video (MMIO)
+    uintptr_t fb_base = boot_info->framebuffer_address;
+    uint64_t fb_size = boot_info->screen_width * boot_info->screen_height * 4;
+    for (uintptr_t i = 0; i < fb_size; i += PAGE_SIZE) {
+        vmm_map(kernel_pml4, fb_base + i, fb_base + i, PTE_PRESENT | PTE_WRITABLE);
+    }
+
     vmm_switch_pagemap(kernel_pml4);
 }
 

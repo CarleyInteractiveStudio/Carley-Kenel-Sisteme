@@ -31,12 +31,8 @@ static void hlt(void) { for (;;) { __asm__("hlt"); } }
 // SMP deshabilitado temporalmente para el cargador custom
 // void ap_main(...) { ... }
 
-void draw_splash(void) {
-    video_clear(0x000000);
-    video_draw_string("CARLEY OS", 270, 200, 0xFFFFFF);
-    video_draw_rect(220, 230, 200, 10, 0x555555);
-    video_draw_rect(220, 230, 50, 10, 0x3498DB);
-}
+void kmain(boot_info_t *boot_info);
+void draw_splash(void);
 
 void kmain(boot_info_t *boot_info) {
     cpu_enable_features();
@@ -78,4 +74,11 @@ void kmain(boot_info_t *boot_info) {
 
     __asm__ volatile("sti");
     for (;;) hlt();
+}
+
+void draw_splash(void) {
+    video_clear(0x000000);
+    video_draw_string("CARLEY OS", 270, 200, 0xFFFFFF);
+    video_draw_rect(220, 230, 200, 10, 0x555555);
+    video_draw_rect(220, 230, 50, 10, 0x3498DB);
 }
