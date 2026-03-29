@@ -84,7 +84,9 @@ load_kernel_loop:
     int 0x13
 
     ; Usar registro para evitar advertencias de tamaño en 16 bits
-    mov eax, [0x20000]
+    ; Buscamos en el offset 5 (el salto 'jmp kmain' ocupa 5 bytes)
+    mov ebx, 0x20005
+    mov eax, [ebx]
     cmp eax, 0xC0DEB007
     je found_hdd
 
@@ -94,7 +96,8 @@ load_kernel_loop:
     mov ah, 0x42
     int 0x13
 
-    mov eax, [0x20000]
+    mov ebx, 0x20005
+    mov eax, [ebx]
     cmp eax, 0xC0DEB007
     je found_cd
 

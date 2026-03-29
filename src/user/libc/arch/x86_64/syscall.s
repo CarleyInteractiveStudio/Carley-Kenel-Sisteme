@@ -44,3 +44,5 @@ syscall4:
     mov %r8, %r10
     int $0x80
     ret
+
+.section .note.GNU-stack,"",@progbits

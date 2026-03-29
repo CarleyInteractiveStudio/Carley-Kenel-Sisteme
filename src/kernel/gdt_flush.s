@@ -21,3 +21,5 @@ gdt_flush:
 
 .reload_cs:
     ret
+
+.section .note.GNU-stack,"",@progbits

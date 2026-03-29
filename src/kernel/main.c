@@ -35,6 +35,8 @@ void kmain(boot_info_t *boot_info);
 void draw_splash(void);
 
 // Firma mágica para que el cargador encuentre el kernel (0xC0DEB007)
+// Saltamos sobre la firma para que no se ejecute como código
+__asm__("jmp kmain");
 __asm__(".long 0xC0DEB007");
 
 void kmain(boot_info_t *boot_info) {
