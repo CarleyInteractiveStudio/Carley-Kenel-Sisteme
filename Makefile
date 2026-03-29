@@ -12,7 +12,7 @@ CFLAGS := -Wall -Wextra -std=c11 -ffreestanding -fno-stack-protector -fno-stack-
 
 LDFLAGS := -nostdlib -static -m elf_x86_64 -z max-page-size=0x1000 -T linker.ld --oformat binary
 
-C_SOURCES := $(shell find src/kernel -name '*.c') $(shell find common -name '*.c')
+C_SOURCES := src/kernel/main.c $(filter-out src/kernel/main.c, $(shell find src/kernel -name '*.c')) $(shell find common -name '*.c')
 S_SOURCES := $(shell find src/kernel -name '*.s')
 OBJ := $(C_SOURCES:.c=.o) $(S_SOURCES:.s=.o)
 

@@ -41,6 +41,10 @@ void draw_splash(void) {
 void kmain(boot_info_t *boot_info) {
     cpu_enable_features();
 
+    // Inicializar video lo antes posible para ver si arranca
+    video_init_vbe(boot_info->framebuffer_address, boot_info->screen_width, boot_info->screen_height);
+    video_clear(0x0000FF); // Pantalla AZUL para depuración: el kernel ha empezado
+
     // Reemplazaremos pmm_init() para usar boot_info->memory_map_address
     pmm_init_custom(boot_info->memory_map_address, boot_info->memory_map_count);
     vmm_init(boot_info);
@@ -62,8 +66,7 @@ void kmain(boot_info_t *boot_info) {
     pit_init(100);
     sched_create_task(audio_mixer_step, false);
 
-    // Inicializar video usando la dirección lineal de VBE
-    video_init_vbe(boot_info->framebuffer_address, boot_info->screen_width, boot_info->screen_height);
+    // Dibujar splash
     draw_splash();
     video_clear(0x1E1E1E);
     mouse_init();
