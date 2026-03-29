@@ -12,8 +12,12 @@ start:
     ; Guardar el número de unidad de arranque pasado por BIOS en DL
     mov [boot_drive], dl
 
+    ; Pasar el numero de unidad en DL al Stage 2
+    mov dl, [boot_drive]
+
     ; Cargar Stage 2 (suponemos que está justo después del MBR)
     ; Cargamos 32 sectores (16KB aprox) para estar seguros
+    mov dl, [boot_drive] ; Asegurar DL antes de la interrupción
     mov ah, 0x02
     mov al, 32          ; Sectores a leer
     mov ch, 0           ; Cilindro 0
