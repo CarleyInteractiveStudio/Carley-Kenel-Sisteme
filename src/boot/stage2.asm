@@ -102,8 +102,8 @@ start_loading:
     int 0x10
 
     ; 5. Cargar el Kernel desde CarleyFS
-    ; Leer Superbloque (LBA 1)
-    mov dword [dap_lba], 1
+    ; Leer Superbloque (LBA 64)
+    mov dword [dap_lba], 64
     mov word [dap_count], 1
     mov word [dap_segment], 0x0700 ; 0x7000
     mov word [dap_offset], 0x0000
@@ -117,8 +117,8 @@ start_loading:
     cmp eax, 0xCA121E1
     jne disk_error_stage2
 
-    ; Leer Tabla de Inodos (LBA 2, 32 sectores) a 0x7200
-    mov dword [dap_lba], 2
+    ; Leer Tabla de Inodos (LBA 65, 32 sectores) a 0x7200
+    mov dword [dap_lba], 65
     mov word [dap_count], 32
     mov word [dap_segment], 0x0720
     mov si, dap

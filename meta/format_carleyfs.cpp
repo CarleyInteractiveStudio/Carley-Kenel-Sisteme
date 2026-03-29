@@ -4,8 +4,9 @@
 #include <string.h>
 
 #define MAX_INODES 64
-#define INODE_SECTOR_START 2
-#define DATA_SECTOR_START 34
+#define SUPERBLOCK_SECTOR 64
+#define INODE_SECTOR_START 65
+#define DATA_SECTOR_START 96
 
 typedef struct {
     char name[64];
@@ -90,11 +91,11 @@ int main(int argc, char **argv) {
     if (argc > 4) add_file(argv[4], "initrd");
     if (argc > 5) add_file(argv[5], "ap_trampoline");
 
-    // Escribir Superbloque (LBA 1)
-    fseek(img, 512, SEEK_SET);
+    // Escribir Superbloque (LBA 64)
+    fseek(img, SUPERBLOCK_SECTOR * 512, SEEK_SET);
     fwrite(&sb, 1, 512, img);
 
-    // Escribir Tabla de Inodos (LBA 2)
+    // Escribir Tabla de Inodos (LBA 65)
     fseek(img, 512 * INODE_SECTOR_START, SEEK_SET);
     fwrite(inodes, sizeof(carleyfs_inode_t), MAX_INODES, img);
 
