@@ -52,17 +52,14 @@ task_t *sched_create_task(void (*entry)(void), bool user) {
     new_task->kernel_stack = (void *)((uintptr_t)kstack_phys + hhdm);
 
     uintptr_t stack_virt;
-    uintptr_t stack_access_ptr;
     if (user) {
         void *ustack_phys = pmm_alloc_pages(2);
         stack_virt = 0x70000000000;
         for(size_t i = 0; i < 2; i++) {
             vmm_map(new_task->pml4, stack_virt + (i * PAGE_SIZE), (uintptr_t)ustack_phys + (i * PAGE_SIZE), PTE_PRESENT | PTE_WRITABLE | PTE_USER);
         }
-        stack_access_ptr = (uintptr_t)ustack_phys + hhdm;
     } else {
         stack_virt = (uintptr_t)new_task->kernel_stack;
-        stack_access_ptr = stack_virt;
     }
 
     new_task->stack_base = (void *)stack_virt;
