@@ -197,16 +197,26 @@ pm_start:
 
     mov dword [0x20000], 0x21003 ; PML4[0] -> PDPT (0x21000)
     mov dword [0x20000 + 4], 0
-    mov dword [0x21000], 0x22003 ; PDPT[0] -> PD (0x22000)
-    mov dword [0x21000 + 4], 0
+    ; PML4[0] -> PDPT (0x21000)
+    mov dword [0x20000], 0x21003
+    mov dword [0x20000 + 4], 0
+
+    ; PDPT[0,1,2,3] -> PDs (0x22000, 0x23000, 0x24000, 0x25000) para mapear 4GB
+    mov dword [0x21000], 0x22003
+    mov dword [0x21008], 0x23003
+    mov dword [0x21010], 0x24003
+    mov dword [0x21018], 0x25003
+
+    ; Rellenar las 4 tablas de directorio de páginas (512 entradas de 2MB cada una)
     mov edi, 0x22000
-    mov eax, 0x00000083        ; 2MB Pages | Writable | Present
-    mov ecx, 512
-map_loop:
+    mov eax, 0x00000083        ; Base 0x0, 2MB Pages, Writable, Present
+    mov ecx, 2048              ; 512 * 4 = 2048 entradas (4GB totales)
+map_4gb_loop:
     mov [edi], eax
-    add eax, 0x200000
+    mov dword [edi + 4], 0     ; Asegurar bits altos en 0
+    add eax, 0x200000          ; Siguiente página de 2MB
     add edi, 8
-    loop map_loop
+    loop map_4gb_loop
 
     ; 6. Habilitar PAE y Long Mode
     mov eax, cr4
@@ -254,6 +264,10 @@ long_mode_start:
 
     ; Pasar el puntero de Boot Info en RDI (primer argumento de C)
     mov rdi, 0x6000
+
+    ; Imprimir 'K' (Entering Kernel)
+    mov rax, 0x0F4B0F4B0F4B0F4B ; 'K' en video modo texto
+    mov [0xB8000], rax
 
     ; Saltar al kernel en 1MB
     mov rax, 0x100000

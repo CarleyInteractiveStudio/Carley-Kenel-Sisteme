@@ -61,13 +61,13 @@ iso: carley-os.img
 	cp carley-os.img iso_root/
 	# Creamos la ISO usando la imagen de disco como sector de arranque El Torito
 	# Usamos flags mas robustos para BIOS
+	# Quitamos -boot-info-table para evitar errores con imagenes grandes
 	xorriso -as mkisofs \
 		-quiet \
 		-V "CARLEY_OS" \
 		-b carley-os.img \
 		-no-emul-boot \
 		-boot-load-size 4 \
-		-boot-info-table \
 		-o carley-os.iso iso_root || \
 	(echo "Error: xorriso no encontrado o fallo al crear ISO." && rm -rf iso_root && exit 1)
 	rm -rf iso_root
