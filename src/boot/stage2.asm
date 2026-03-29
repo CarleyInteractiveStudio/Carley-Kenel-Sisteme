@@ -25,7 +25,7 @@ stage2_start:
     mov di, 0x9000
     xor ebx, ebx
     mov edx, 0x534D4150    ; 'SMAP'
-    mov word [mem_count], 0
+    mov dword [mem_count_extended], 0
 do_e820:
     mov eax, 0xe820
     mov ecx, 24
@@ -82,7 +82,10 @@ load_kernel_loop:
     mov dl, [boot_drive]
     mov ah, 0x42
     int 0x13
-    cmp dword [0x20000], 0xC0DEB007
+
+    ; Usar registro para evitar advertencias de tamaño en 16 bits
+    mov eax, [0x20000]
+    cmp eax, 0xC0DEB007
     je found_hdd
 
     ; Intentar encontrar el kernel en LBA 512 (CD-ROM)
@@ -90,7 +93,9 @@ load_kernel_loop:
     mov si, dap
     mov ah, 0x42
     int 0x13
-    cmp dword [0x20000], 0xC0DEB007
+
+    mov eax, [0x20000]
+    cmp eax, 0xC0DEB007
     je found_cd
 
     ; Si no se encuentra, error fatal
@@ -296,7 +301,7 @@ long_mode_start:
     mov dword [0x6008], 1024
     mov dword [0x600c], 768
     mov qword [0x6010], 0x9000
-    movzx rax, word [mem_count]
+    mov eax, [mem_count_extended]
     mov [0x6018], eax
 
     ; Pasar el puntero de Boot Info en RDI (primer argumento de C)
