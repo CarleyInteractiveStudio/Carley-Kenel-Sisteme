@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stdint.h>
 
+extern long syscall1(int num, long arg1);
 extern long syscall3(int num, long arg1, long arg2, long arg3);
 
 /* ld-carley.so: Enlazador Dinamico del Sistema */
