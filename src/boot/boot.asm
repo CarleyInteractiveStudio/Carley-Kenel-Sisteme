@@ -15,18 +15,28 @@ start:
     ; Pasar el numero de unidad en DL al Stage 2
     mov dl, [boot_drive]
 
-    ; Cargar Stage 2 (suponemos que está justo después del MBR)
-    ; Cargamos 32 sectores (16KB aprox) para estar seguros
-    mov dl, [boot_drive] ; Asegurar DL antes de la interrupción
+    ; Reiniciar disco
+    xor ax, ax
+    int 0x13
+
+    ; Cargar Stage 2 usando LBA extensions (más compatible con ISOs y discos modernos)
+    mov si, dap_stage2
+    mov ah, 0x42
+    int 0x13
+    jnc jump_to_stage2
+
+    ; Fallback a CHS si LBA falla
+    mov dl, [boot_drive]
     mov ah, 0x02
-    mov al, 32          ; Sectores a leer
-    mov ch, 0           ; Cilindro 0
-    mov dh, 0           ; Cabeza 0
-    mov cl, 2           ; Sector 2 (el sector 1 es este MBR)
-    mov bx, 0x8000      ; Cargar en 0x0000:0x8000
+    mov al, 32
+    mov ch, 0
+    mov dh, 0
+    mov cl, 2
+    mov bx, 0x8000
     int 0x13
     jc disk_error
 
+jump_to_stage2:
     ; Saltar al Stage 2
     jmp 0x8000
 
@@ -37,6 +47,15 @@ disk_error:
     jmp $
 
 boot_drive db 0
+
+align 4
+dap_stage2:
+    db 0x10
+    db 0
+    dw 32          ; 32 sectores
+    dw 0x8000      ; Offset 0x8000
+    dw 0x0000      ; Segmento 0
+    dq 1           ; Empezar en LBA 1 (justo tras el MBR)
 
 times 510-($-$$) db 0
 dw 0xaa55
