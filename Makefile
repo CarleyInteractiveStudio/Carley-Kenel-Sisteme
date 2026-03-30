@@ -61,11 +61,12 @@ userland:
 
 # Target para generar una ISO booteable (BIOS/Legacy)
 iso: carley-os.img bootloader
-	@echo "Generando carley-os.iso..."
+	@echo "Generando carley-os.iso (Modo Híbrido)..."
 	mkdir -p iso_root
 	cp carley-os.img iso_root/
-	# Usamos carley-os.img como imagen de arranque El Torito
-	# BIOS cargará los primeros 32 sectores (Stage 1 + Stage 2) automáticamente
+	# Usamos xorriso para crear una ISO.
+	# Hemos eliminado -boot-info-table porque la imagen es muy grande (40MB)
+	# y no es necesaria para nuestro cargador personalizado.
 	xorriso -as mkisofs \
 		-quiet \
 		-V "CARLEY_OS" \
@@ -73,7 +74,9 @@ iso: carley-os.img bootloader
 		-no-emul-boot \
 		-boot-load-size 32 \
 		-o carley-os.iso iso_root || \
-	(echo "Error: xorriso no encontrado o fallo al crear ISO." && rm -rf iso_root && exit 1)
+	(echo "Error: xorriso falló al crear ISO." && rm -rf iso_root && exit 1)
+	# Aplicamos isohybrid si está disponible para asegurar compatibilidad total
+	-isohybrid carley-os.iso 2>/dev/null || true
 	rm -rf iso_root
 	@echo "¡ISO generada con éxito: carley-os.iso!"
 

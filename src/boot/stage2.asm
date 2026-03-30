@@ -38,6 +38,40 @@ stage2_start:
     jne .do_e820
 .e820_done:
 
+    ; Buscar RSDP (ACPI) en 0xE0000 - 0xFFFFF
+    mov dword [rsdp_addr_low], 0
+    mov ax, 0xE000
+    mov es, ax
+    xor di, di
+.search_rsdp:
+    cmp dword [es:di], 'RSD '
+    jne .next_rsdp
+    cmp dword [es:di+4], 'PTR '
+    je .found_rsdp
+.next_rsdp:
+    add di, 16
+    jnz .search_rsdp
+    ; Probar segmento 0xF000 (BIOS usualmente pone RSDP aquí)
+    mov ax, es
+    cmp ax, 0xF000
+    je .rsdp_done
+    mov ax, 0xF000
+    mov es, ax
+    jmp .search_rsdp
+
+    ; Si llegamos aquí y no lo encontramos, rsdp_addr_low queda en 0
+    jmp .rsdp_done
+.found_rsdp:
+    xor eax, eax
+    mov ax, es
+    shl eax, 4
+    movzx edx, di
+    add eax, edx
+    mov [rsdp_addr_low], eax
+.rsdp_done:
+    xor ax, ax
+    mov es, ax
+
     ; Trace: 'E'
     mov ax, 0x0e45
     int 0x10
@@ -101,6 +135,7 @@ stage2_start:
     mov ebx, [si + 68] ; start sector
     pop es
     pop ds ; DS RESTAURADO A 0 (Seguridad total)
+    mov gs, ax ; Limpiar GS con 0 (AX es 0 por pop ds)
 
     mov [kernel_sectors_left_bytes], eax
     mov [kernel_lba_current], ebx
@@ -176,10 +211,35 @@ stage2_start:
     jmp 0x08:pm_start
 
 disk_error_s2:
-    mov ax, 0x0e46 ; 'F'
-    xor bx, bx
+    push ax
+    mov al, 'F'
+    mov ah, 0x0e
     int 0x10
+    pop ax
+    mov al, ah ; Error code from int 13h is in AH
+    call print_hex
     hlt
+
+; Helper to print AL as hex
+print_hex:
+    pusha
+    mov cx, 2
+.loop:
+    push ax
+    shr al, 4
+    and al, 0x0F
+    cmp al, 10
+    jl .digit
+    add al, 7
+.digit:
+    add al, '0'
+    mov ah, 0x0e
+    int 0x10
+    pop ax
+    shl al, 4
+    loop .loop
+    popa
+    ret
 
 kernel_name db "kernel", 0
 
@@ -195,7 +255,7 @@ pm_start:
     mov edi, 0x20000
     mov cr3, edi
     xor eax, eax
-    mov ecx, 4096
+    mov ecx, 6144 ; Limpiar 24KB (6 páginas para PML4, PDPT y 4 PDs)
     rep stosd
 
     mov dword [0x20000], 0x21003
@@ -237,14 +297,22 @@ long_mode_start:
     mov ss, ax
     mov rsp, 0x9FFF0 ; Alineada a 16 bytes
 
-    ; 9. Pasar Boot Info
-    mov eax, [0x7000 + 40] ; PhysBasePtr real
+    ; 9. Pasar Boot Info (Estructura boot_info_t packed)
+    ; Offset 0: framebuffer_address (8 bytes)
+    mov eax, [0x7000 + 40] ; PhysBasePtr real desde VBE Mode Info Block
     mov [0x6000], rax
+    ; Offset 8: screen_width (4 bytes)
     mov dword [0x6008], 1024
+    ; Offset 12: screen_height (4 bytes)
     mov dword [0x600c], 768
+    ; Offset 16: memory_map_address (8 bytes)
     mov qword [0x6010], 0x9000
+    ; Offset 24: memory_map_count (4 bytes)
     mov eax, [mem_count_extended]
     mov [0x6018], eax
+    ; Offset 28: rsdp_address (8 bytes) - NOTA: Packed struct pone esto en 28
+    mov eax, [rsdp_addr_low]
+    mov [0x601C], rax
 
     mov rdi, 0x6000
     mov rax, 0xFFFF800000100000
@@ -253,11 +321,12 @@ long_mode_start:
 
 ; --- Datos ---
 mem_count_extended dd 0
+rsdp_addr_low dd 0
 boot_drive db 0
 kernel_sectors_left_bytes dd 0
 kernel_lba_current dd 0
 
-align 4
+align 16
 dap:
     db 0x10, 0
 dap_count: dw 0
