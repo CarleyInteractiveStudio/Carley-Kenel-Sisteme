@@ -1,6 +1,6 @@
 #include "smp.h"
-#include "acpi.h"
-#include "apic.h"
+#include "drivers/acpi.h"
+#include "drivers/apic.h"
 #include "pmm.h"
 #include "vmm.h"
 #include "cpu.h"
@@ -8,13 +8,15 @@
 #include "idt.h"
 #include "string.h"
 #include "drivers/video.h"
+#include "vfs.h"
+#include "kheap.h"
 #include "config.h"
 
 static int cpu_count = 0;
 static volatile int cpus_started = 0;
 
 void smp_init(void) {
-    acpi_header_t *madt = acpi_find_table("APIC");
+    acpi_header_t *madt = (acpi_header_t *)acpi_find_table("APIC");
     if (!madt) return;
 
     uint8_t *ptr = (uint8_t *)madt + sizeof(acpi_header_t) + 8;
@@ -22,9 +24,9 @@ void smp_init(void) {
 
     // 1. Cargar el Trampoline en 0x1000 (Dirección física baja)
     // Buscamos el archivo en el VFS (montado desde el initrd o carleyfs)
-    vfs_node_t *tramp_node = vfs_finddir(vfs_root, "ap_trampoline");
+    vfs_node_t *tramp_node = vfs_open("ap_trampoline");
     if (tramp_node) {
-        uint8_t *tramp_buf = kmalloc(tramp_node->size);
+        uint8_t *tramp_buf = (uint8_t *)kmalloc(tramp_node->size);
         vfs_read(tramp_node, 0, tramp_node->size, tramp_buf);
         // Copiar a la dirección física 0x1000 (accesible via identity o HHDM)
         memcpy((void *)(0x1000 + HHDM_OFFSET), tramp_buf, tramp_node->size);

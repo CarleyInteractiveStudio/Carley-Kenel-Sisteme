@@ -1,5 +1,6 @@
 #include "cpu.h"
 #include "kheap.h"
+#include "config.h"
 #include <stddef.h>
 
 #define MSR_GS_BASE 0xC0000101
@@ -19,6 +20,10 @@ void cpu_enable_features(void) {
 
 void cpu_init_local(uint64_t id) {
     cpu_local_t *local = kmalloc(sizeof(cpu_local_t));
+    // El scheduler/cpu_get_local espera direcciones virtuales Higher Half si HHDM esta activo.
+    // Como usamos kmalloc que devuelve direcciones virtuales (que actualmente son identity),
+    // pero el sistema podria cambiar, nos aseguramos que si HHDM_OFFSET != 0, estemos en el higher half.
+
     local->self = local;
     local->cpu_id = id;
     local->current_task = NULL;

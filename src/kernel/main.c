@@ -3,6 +3,7 @@
 #include <stdbool.h>
 #include "boot_info.h"
 #include "string.h"
+#include "libc/stdio.h"
 #include "pmm.h"
 #include "vmm.h"
 #include "kheap.h"
@@ -20,6 +21,8 @@
 #include "drivers/video.h"
 #include "drivers/audio.h"
 #include "drivers/composer.h"
+#include "drivers/acpi.h"
+#include "config.h"
 #include "elf.h"
 #include "keyboard_buf.h"
 #include "cpu.h"
@@ -37,22 +40,17 @@ static void hlt(void) { for (;;) { __asm__("hlt"); } }
 void kmain(boot_info_t *boot_info);
 void draw_splash(void);
 
-// Firma mágica para que el cargador encuentre el kernel (0xC0DEB007)
-// Saltamos sobre la firma para que no se ejecute como código
-__asm__("jmp kmain");
-__asm__(".long 0xC0DEB007");
-
 void kmain(boot_info_t *boot_info) {
     cpu_enable_features();
 
     // Inicializar video lo antes posible para ver si arranca
     // Usamos el offset HHDM para acceder al framebuffer
-    video_init_vbe(boot_info->framebuffer_address + 0xFFFF800000000000, boot_info->screen_width, boot_info->screen_height);
+    video_init_vbe(boot_info->framebuffer_address + HHDM_OFFSET, boot_info->screen_width, boot_info->screen_height);
     video_clear(0x0000FF); // Pantalla AZUL para depuración: el kernel ha empezado
 
     // Reemplazaremos pmm_init() para usar boot_info->memory_map_address
     // El mapa de memoria está en 0x9000, accesible via HHDM o identity
-    pmm_init_custom(boot_info->memory_map_address + 0xFFFF800000000000, boot_info->memory_map_count);
+    pmm_init_custom(boot_info->memory_map_address + HHDM_OFFSET, boot_info->memory_map_count);
     vmm_init(boot_info);
     kheap_init();
 
