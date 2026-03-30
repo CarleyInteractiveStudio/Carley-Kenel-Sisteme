@@ -73,6 +73,11 @@ int main(int argc, char **argv) {
             start = INITRD_SECTOR;
         }
 
+        // Alinear a 2048 bytes para compatibilidad con ISO
+        if (start == sb.next_free_sector) {
+            start = (start + 3) & ~3;
+        }
+
         fseek(img, (long)start * 512, SEEK_SET);
         fwrite(buf, 1, size, img);
 
@@ -84,7 +89,7 @@ int main(int argc, char **argv) {
 
         sb.num_inodes++;
         if (start == sb.next_free_sector) {
-            sb.next_free_sector += (size + 511) / 512;
+            sb.next_free_sector = start + (size + 511) / 512;
         }
 
         free(buf);

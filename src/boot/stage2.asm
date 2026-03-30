@@ -157,23 +157,15 @@ stage2_start:
     jmp disk_error_s2
 
 .inodes_ok:
-
-    ; Leer Inodos (LBA 132)
-    mov dword [dap_lba], 132
-    mov word [dap_count], 32
-    mov word [dap_segment], 0x1020 ; Buffer 0x10200
-    int 0x13
-    jc disk_error_s2
-
     ; Buscar "kernel"
     ; PROTECCIÓN: Empujamos DS y ES
     push ds
     push es
     mov ax, 0x1020
-    mov ds, ax     ; DS -> Inodos
+    mov ds, ax     ; DS -> Inodos (Donde acabamos de cargar los inodos)
     xor si, si
     mov ax, 0
-    mov es, ax     ; ES -> kernel_name
+    mov es, ax     ; ES -> kernel_name (En el segmento 0)
     mov cx, 64
 .search_loop:
     push cx
@@ -188,14 +180,15 @@ stage2_start:
     loop .search_loop
     pop es
     pop ds
-    jmp disk_error_s2
+    jmp kernel_not_found_err
 
 .found_kernel:
     mov eax, [si + 64] ; size
     mov ebx, [si + 68] ; start sector
     pop es
     pop ds ; DS RESTAURADO A 0 (Seguridad total)
-    mov gs, ax ; Limpiar GS con 0 (AX es 0 por pop ds)
+    xor ax, ax
+    mov gs, ax ; Limpiar GS con 0
 
     mov [kernel_sectors_left_bytes], eax
     mov [kernel_lba_current], ebx
@@ -274,16 +267,32 @@ stage2_start:
     jmp 0x08:pm_start
 
 disk_error_s2:
-    push ax
-    mov al, 'F'
-    mov ah, 0x0e
-    int 0x10
-    pop ax
+    mov si, msg_disk_err
+    call print_string
     mov al, ah ; Error code from int 13h is in AH
     call print_hex
 .hang:
     hlt
     jmp .hang
+
+kernel_not_found_err:
+    mov si, msg_kernel_err
+    call print_string
+.hang:
+    hlt
+    jmp .hang
+
+; Helper to print a string
+print_string:
+    mov ah, 0x0e
+.loop:
+    lodsb
+    test al, al
+    jz .done
+    int 0x10
+    jmp .loop
+.done:
+    ret
 
 ; Helper to print AL as hex
 print_hex:
@@ -307,6 +316,8 @@ print_hex:
     ret
 
 kernel_name db "kernel", 0
+msg_disk_err db "ERR: DISK ", 0
+msg_kernel_err db "ERR: KERNEL NOT FOUND", 0
 
 [bits 32]
 pm_start:
