@@ -138,8 +138,15 @@ stage2_start:
     xor edx, edx
     div dword [sector_factor]
     mov [dap_lba], eax
+    mov dword [dap_lba + 4], 0 ; Ensure high 32 bits are zero
 
-    mov word [dap + 2], 32     ; count
+    ; 128 inodos * 128 bytes = 16KB.
+    ; En HDD (512): 32 sectores. En ISO (2048): 8 sectores.
+    ; Usamos 8 sectores físicos para evitar DMA Boundary en 0x30000
+    mov eax, 32
+    xor edx, edx
+    div dword [sector_factor]
+    mov [dap + 2], ax          ; count (8 o 32)
     mov word [dap + 4], 0x0000 ; offset
     mov word [dap + 6], 0x2100 ; segment (Buffer 0x21000)
 
@@ -222,9 +229,14 @@ stage2_start:
     xor edx, edx
     div dword [sector_factor]
     mov [dap_lba], eax
+    mov dword [dap_lba + 4], 0
 
-    ; Leer solo 16 sectores (8KB) para evitar errores DMA y límites de 64KB
-    mov word [dap + 2], 16     ; count
+    ; Leemos 16 KB en cada iteración (seguro contra límites DMA de 64KB)
+    ; En HDD (512): 32 sectores. En ISO (2048): 8 sectores.
+    mov eax, 32
+    xor edx, edx
+    div dword [sector_factor]
+    mov [dap + 2], ax          ; count (8 o 32)
     mov word [dap + 4], 0x0000 ; offset
     mov word [dap + 6], 0x4000 ; segment (Buffer 0x40000)
 
@@ -235,7 +247,8 @@ stage2_start:
     jc disk_error_s2
 
     ; Copiar a 1MB usando Unreal Mode (GS)
-    mov ecx, (16 * 512) / 4
+    ; Siempre copiamos 16KB (4096 dwords)
+    mov ecx, 4096
     mov esi, 0x40000
 .copy:
     mov eax, [gs:esi]
@@ -244,10 +257,10 @@ stage2_start:
     add edi, 4
     loop .copy
 
-    add dword [kernel_lba_current], 16
-    cmp dword [kernel_sectors_left_bytes], (16 * 512)
+    add dword [kernel_lba_current], 32 ; Avanzamos 32 sectores lógicos (16KB)
+    cmp dword [kernel_sectors_left_bytes], 16384
     jbe .kernel_ok
-    sub dword [kernel_sectors_left_bytes], (16 * 512)
+    sub dword [kernel_sectors_left_bytes], 16384
     jmp .load_loop
 
 .kernel_ok:
