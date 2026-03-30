@@ -51,7 +51,7 @@ stage2_start:
 .next_rsdp:
     add di, 16
     jnz .search_rsdp
-    ; Probar segmento 0xF000 (BIOS usualmente pone RSDP aquí)
+    ; Probar segmento 0xF000
     mov ax, es
     cmp ax, 0xF000
     je .rsdp_done
@@ -59,8 +59,6 @@ stage2_start:
     mov es, ax
     jmp .search_rsdp
 
-    ; Si llegamos aquí y no lo encontramos, rsdp_addr_low queda en 0
-    jmp .rsdp_done
 .found_rsdp:
     xor eax, eax
     mov ax, es
@@ -76,26 +74,25 @@ stage2_start:
     mov ax, 0x0e45
     int 0x10
 
-    ; 3. Detección REAL de Video (Evita Error Crítico en VBox)
+    ; 3. Detección de Video
     mov ax, 0x4f01
     mov cx, 0x4118 ; 1024x768x32
     mov di, 0x7000 ; ModeInfoBlock
     int 0x10
 
-    ; 4. Cargar el Kernel desde el disco (LBA 128+)
-    ; Buscamos en el sistema de archivos CarleyFS.
-    ; Intentamos LBA 128 (512-byte sectors) o LBA 32 (2048-byte sectors)
+    ; 4. Cargar el Kernel
+    ; Intentamos LBA 128 (HDD) o LBA 32 (ISO 2048-bytes)
     mov dword [dap_lba], 128
     mov dword [dap_lba + 4], 0
 .try_read_sb:
-    ; Configurar DAP manualmente para máxima seguridad
+    ; Reset DAP para evitar basura de BIOS previas
     mov byte [dap], 0x10
     mov byte [dap + 1], 0
     mov word [dap + 2], 1      ; count
-    mov word [dap + 4], 0x0000 ; offset
-    mov word [dap + 6], 0x2000 ; segment (Buffer 0x20000)
+    mov word [dap + 4], 0x0010 ; offset (Evitamos exactamente 0x0000)
+    mov word [dap + 6], 0x2000 ; segment (Buffer 0x20010)
 
-    mov cx, 3 ; 3 intentos
+    mov cx, 3
 .retry_sb:
     push cx
     mov si, dap
@@ -106,7 +103,7 @@ stage2_start:
     jnc .sb_read_ok
     loop .retry_sb
 
-    ; Si falló LBA 128, probamos LBA 32 (Modo CD-ROM puro)
+    ; Si falló 128, probamos 32
     cmp dword [dap_lba], 32
     je disk_error_s2
     mov dword [dap_lba], 32
@@ -116,39 +113,34 @@ stage2_start:
     ; Verificar Magic
     mov ax, 0x2000
     mov gs, ax
-    cmp dword [gs:0], 0xCA121E1
+    cmp dword [gs:0x10], 0xCA121E1
     je .found_sb
 
-    ; Si el magic es incorrecto, probamos el otro LBA
     cmp dword [dap_lba], 32
     je disk_error_s2
     mov dword [dap_lba], 32
     jmp .try_read_sb
 
 .found_sb:
-    ; Calcular factor de sector (si LBA 32 funcionó, necesitamos dividir los LBAs por 4)
     mov dword [sector_factor], 1
     cmp dword [dap_lba], 32
     jne .read_inodes
     mov dword [sector_factor], 4
 
 .read_inodes:
-    ; Leer Inodos (LBA 132 o 33)
     mov eax, 132
     xor edx, edx
     div dword [sector_factor]
     mov [dap_lba], eax
-    mov dword [dap_lba + 4], 0 ; Ensure high 32 bits are zero
+    mov dword [dap_lba + 4], 0
 
-    ; 128 inodos * 128 bytes = 16KB.
-    ; En HDD (512): 32 sectores. En ISO (2048): 8 sectores.
-    ; Usamos 8 sectores físicos para evitar DMA Boundary en 0x30000
+    ; 16KB = 8 sectores de 2048 o 32 de 512
     mov eax, 32
     xor edx, edx
     div dword [sector_factor]
-    mov [dap + 2], ax          ; count (8 o 32)
-    mov word [dap + 4], 0x0000 ; offset
-    mov word [dap + 6], 0x2100 ; segment (Buffer 0x21000)
+    mov [dap + 2], ax
+    mov word [dap + 4], 0x0010 ; offset
+    mov word [dap + 6], 0x2100 ; segment (Buffer 0x21010)
 
     mov cx, 3
 .retry_inodes:
@@ -163,14 +155,13 @@ stage2_start:
     jmp disk_error_s2
 
 .inodes_ok:
-    ; Buscar "kernel"
     push ds
     push es
     mov ax, 0x2100
-    mov ds, ax     ; DS -> Inodos
-    xor si, si
-    mov ax, 0
-    mov es, ax     ; ES -> kernel_name
+    mov ds, ax
+    mov si, 0x10 ; Offset 0x10 por la carga anterior
+    xor ax, ax
+    mov es, ax
     mov cx, 64
 .search_loop:
     push cx
@@ -191,15 +182,15 @@ stage2_start:
     mov eax, [si + 64] ; size
     mov ebx, [si + 68] ; start sector
     pop es
-    pop ds ; DS RESTAURADO A 0
+    pop ds
     xor ax, ax
-    mov gs, ax ; Limpiar GS con 0
+    mov gs, ax
 
     mov [kernel_sectors_left_bytes], eax
     mov [kernel_lba_current], ebx
-    mov edi, 0x100000 ; Destino final (1MB)
+    mov edi, 0x100000
 
-    ; Unreal Mode para escribir en memoria extendida
+    ; Unreal Mode
     push ds
     lgdt [gdt_ptr]
     mov eax, cr0
@@ -224,21 +215,19 @@ stage2_start:
     mov es, ax
 
 .load_loop:
-    ; Calcular LBA ajustada por sector_factor
     mov eax, [kernel_lba_current]
     xor edx, edx
     div dword [sector_factor]
     mov [dap_lba], eax
     mov dword [dap_lba + 4], 0
 
-    ; Leemos 16 KB en cada iteración (seguro contra límites DMA de 64KB)
-    ; En HDD (512): 32 sectores. En ISO (2048): 8 sectores.
+    ; Cargamos de 16KB en 16KB
     mov eax, 32
     xor edx, edx
     div dword [sector_factor]
-    mov [dap + 2], ax          ; count (8 o 32)
-    mov word [dap + 4], 0x0000 ; offset
-    mov word [dap + 6], 0x4000 ; segment (Buffer 0x40000)
+    mov [dap + 2], ax
+    mov word [dap + 4], 0x0010
+    mov word [dap + 6], 0x4000 ; Buffer 0x40010 (Seguro, no cruza 0x50000)
 
     mov si, dap
     mov dl, [boot_drive]
@@ -246,10 +235,8 @@ stage2_start:
     int 0x13
     jc disk_error_s2
 
-    ; Copiar a 1MB usando Unreal Mode (GS)
-    ; Siempre copiamos 16KB (4096 dwords)
     mov ecx, 4096
-    mov esi, 0x40000
+    mov esi, 0x40010
 .copy:
     mov eax, [gs:esi]
     mov [gs:edi], eax
@@ -257,7 +244,7 @@ stage2_start:
     add edi, 4
     loop .copy
 
-    add dword [kernel_lba_current], 32 ; Avanzamos 32 sectores lógicos (16KB)
+    add dword [kernel_lba_current], 32
     cmp dword [kernel_sectors_left_bytes], 16384
     jbe .kernel_ok
     sub dword [kernel_sectors_left_bytes], 16384
@@ -284,7 +271,7 @@ stage2_start:
 disk_error_s2:
     mov si, msg_disk_err
     call print_string
-    mov al, ah ; Error code from int 13h is in AH
+    mov al, ah
     call print_hex
 .hang:
     hlt
@@ -297,7 +284,6 @@ kernel_not_found_err:
     hlt
     jmp .hang
 
-; Helper to print a string
 print_string:
     mov ah, 0x0e
 .loop:
@@ -309,7 +295,6 @@ print_string:
 .done:
     ret
 
-; Helper to print AL as hex
 print_hex:
     pusha
     mov cx, 2
@@ -342,11 +327,10 @@ pm_start:
     mov ss, ax
     mov esp, 0x90000
 
-    ; 7. Paginación de 64 bits (Identity + HHDM)
     mov edi, 0x20000
     mov cr3, edi
     xor eax, eax
-    mov ecx, 6144 ; Limpiar 24KB (6 páginas para PML4, PDPT y 4 PDs)
+    mov ecx, 6144
     rep stosd
 
     mov dword [0x20000], 0x21003
@@ -365,7 +349,6 @@ pm_start:
     add edi, 8
     loop .map
 
-    ; 8. Long Mode
     mov eax, cr4
     or eax, 1 << 5
     mov cr4, eax
@@ -386,22 +369,15 @@ long_mode_start:
     mov ds, ax
     mov es, ax
     mov ss, ax
-    mov rsp, 0x9FFF0 ; Alineada a 16 bytes
+    mov rsp, 0x9FFF0
 
-    ; 9. Pasar Boot Info (Estructura boot_info_t packed)
-    ; Offset 0: framebuffer_address (8 bytes)
-    mov eax, [0x7000 + 40] ; PhysBasePtr real desde VBE Mode Info Block
+    mov eax, [0x7000 + 40]
     mov [0x6000], rax
-    ; Offset 8: screen_width (4 bytes)
     mov dword [0x6008], 1024
-    ; Offset 12: screen_height (4 bytes)
     mov dword [0x600c], 768
-    ; Offset 16: memory_map_address (8 bytes)
     mov qword [0x6010], 0x9000
-    ; Offset 24: memory_map_count (4 bytes)
     mov eax, [mem_count_extended]
     mov [0x6018], eax
-    ; Offset 28: rsdp_address (8 bytes) - NOTA: Packed struct pone esto en 28
     mov eax, [rsdp_addr_low]
     mov [0x601C], rax
 
@@ -410,7 +386,6 @@ long_mode_start:
     call rax
     hlt
 
-; --- Datos ---
 mem_count_extended dd 0
 rsdp_addr_low dd 0
 sector_factor dd 1
