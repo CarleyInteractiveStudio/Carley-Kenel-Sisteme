@@ -340,7 +340,8 @@ long_mode_start:
     mov rsp, 0x9FFFF
 
     ; Boot Info
-    mov qword [0x6000], 0xFD000000
+    mov rax, 0xFD000000
+    mov qword [0x6000], rax
     mov dword [0x6008], 1024
     mov dword [0x600c], 768
     mov qword [0x6010], 0x9000
