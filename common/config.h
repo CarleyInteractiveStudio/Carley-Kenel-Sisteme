@@ -12,10 +12,12 @@
 /* Page Size (4KB) */
 #define PAGE_SIZE 4096
 
-/* CarleyFS Constants */
+/* CarleyFS Constants - Synchronized with format_carleyfs and stage2 */
 #define CARLEYFS_MAGIC 0xCA121E1
-#define CARLEYFS_INODE_SECTOR 2
-#define CARLEYFS_DATA_SECTOR 34
+#define CARLEYFS_SUPERBLOCK_SECTOR 64
+#define CARLEYFS_INODE_SECTOR 65
+#define CARLEYFS_DATA_SECTOR 96
+#define CARLEYFS_INITRD_SECTOR 20480
 #define CARLEYFS_MAX_INODES 64
 
 #endif

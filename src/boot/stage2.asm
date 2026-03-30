@@ -1,14 +1,11 @@
 [bits 16]
-[org 0x1000]
+[org 0x8000]
 
 stage2_start:
-    ; Imprimir debug ultra-temprano: '!'
-    mov ax, 0x0e21 ; '!'
-    xor bx, bx
-    int 0x10
-
-    ; '1', '2', '3'
+    ; Imprimir '1', '2', '3' para confirmar salto
+    mov ah, 0x0e
     mov al, '1'
+    xor bx, bx
     int 0x10
     mov al, '2'
     int 0x10
@@ -25,7 +22,7 @@ actual_start:
     mov es, ax
     mov [boot_drive], dl
 
-    ; Imprimir 'S' (Stage 2 started)
+    ; Imprimir 'S' - Stage 2 iniciado
     mov ah, 0x0e
     mov al, 'S'
     int 0x10
@@ -35,7 +32,7 @@ actual_start:
     or al, 2
     out 0x92, al
 
-    ; Imprimir 'A' (A20 done)
+    ; Imprimir 'A'
     mov ah, 0x0e
     mov al, 'A'
     int 0x10
@@ -54,12 +51,12 @@ do_e820:
     jne e820_done
     add di, 24
     inc dword [mem_count_extended]
-    cmp dword [mem_count_extended], 128 ; Límite de seguridad
+    cmp dword [mem_count_extended], 128
     jae e820_done
     test ebx, ebx
     jne do_e820
 e820_done:
-    ; Imprimir 'E' (E820 done)
+    ; Imprimir 'E'
     mov ah, 0x0e
     mov al, 'E'
     int 0x10
@@ -74,7 +71,7 @@ e820_done:
     test edx, 1 << 29
     jz no_long_mode
 
-    ; Imprimir 'C' (CPU 64-bit verified)
+    ; Imprimir 'C'
     mov ah, 0x0e
     mov al, 'C'
     int 0x10
@@ -83,16 +80,12 @@ e820_done:
     call clear_screen
     mov si, msg_header
     call print_string
-
-    mov ah, 0x0e
-    mov al, 'M'
-    int 0x10
     mov si, msg_option1
     call print_string
     mov si, msg_option2
     call print_string
 
-    mov cx, 5 ; 5 segundos
+    mov cx, 5
 boot_menu_loop:
     mov si, msg_countdown
     call print_string
@@ -135,16 +128,11 @@ start_loading:
     mov si, msg_loading
     call print_string
 
-    mov ah, 0x0e
-    mov al, 'L'
-    int 0x10
-
     ; 5. Cargar el Kernel desde CarleyFS
-    ; Usar buffer en 0x1000:0x0000 (0x10000) para evitar solapamientos con el cargador
     ; Leer Superbloque (LBA 64)
     mov dword [dap_lba], 64
     mov word [dap_count], 1
-    mov word [dap_segment], 0x1000 ; 0x10000 físico
+    mov word [dap_segment], 0x1000
     mov word [dap_offset], 0x0000
     mov si, dap
     mov dl, [boot_drive]
@@ -158,7 +146,7 @@ start_loading:
     cmp eax, 0xCA121E1
     jne disk_error_stage2
 
-    ; Leer Tabla de Inodos (LBA 65, 32 sectores) a 0x10200 físico
+    ; Leer Tabla de Inodos (LBA 65)
     mov dword [dap_lba], 65
     mov word [dap_count], 32
     mov word [dap_segment], 0x1020
@@ -167,7 +155,7 @@ start_loading:
     int 0x13
     jc disk_error_stage2
 
-    ; Buscar "kernel" en el buffer de inodos (DS:0)
+    ; Buscar "kernel"
     mov ax, 0x1020
     mov ds, ax
     xor si, si
@@ -187,7 +175,6 @@ search_kernel:
 
 found_kernel_inode:
     mov eax, [si + 64] ; size
-    ; Volver a segmento 0 para guardar variables y usar Unreal Mode
     xor bx, bx
     mov es, bx
     mov [es:kernel_sectors_left_bytes], eax
@@ -195,7 +182,6 @@ found_kernel_inode:
     mov [es:kernel_lba_current], eax
     mov edi, 0x100000
 
-    ; Entrar en Unreal Mode para cargar directamente a 1MB
     push ds
     xor ax, ax
     mov ds, ax
@@ -220,13 +206,12 @@ unreal_done:
     xor ax, ax
     mov ds, ax
     mov es, ax
-    ; GS mantiene el límite de 4GB para accesos a memoria alta
 
 load_kernel_loop:
     mov eax, [kernel_lba_current]
     mov [dap_lba], eax
     mov word [dap_count], 64
-    mov word [dap_segment], 0x4000 ; Buffer temporal en 0x40000
+    mov word [dap_segment], 0x4000 ; Buffer en 0x40000
     mov word [dap_offset], 0x0000
     mov si, dap
     mov dl, [boot_drive]
@@ -234,10 +219,8 @@ load_kernel_loop:
     int 0x13
     jc disk_error_stage2
 
-    ; Copiar usando GS (Unreal Mode) para evitar colisiones
     mov ecx, (64 * 512) / 4
     mov esi, 0x40000
-    ; edi se mantiene entre iteraciones
 .inner_copy:
     mov eax, [gs:esi]
     mov [gs:edi], eax
@@ -245,7 +228,6 @@ load_kernel_loop:
     add edi, 4
     loop .inner_copy
 
-    ; Imprimir un punto por cada bloque
     mov ah, 0x0e
     mov al, '.'
     int 0x10
@@ -262,29 +244,8 @@ kernel_loaded:
     mov es, ax
 
     ; 6. Configurar Modo de Video VBE
-    mov si, msg_video_info
-    call print_string
-
-    ; Intentar 1024x768x32 (0x118)
-    mov ax, 0x4f01
-    mov cx, 0x118
-    mov di, 0x7000
-    int 0x10
-    cmp ax, 0x004f
-    je video_ok
-
-    ; Fallback 800x600x32 (0x115)
-    mov cx, 0x115
-    int 0x10
-
-video_ok:
     mov ax, 0x4f02
-    mov bx, cx
-    or bx, 0x4000 ; LFB
-    int 0x10
-
-    mov ah, 0x0e
-    mov al, 'V'
+    mov bx, 0x4118 ; 1024x768x32
     int 0x10
 
     ; 7. Paso a Modo Protegido
@@ -306,6 +267,7 @@ clear_screen:
 
 print_string:
     mov ah, 0x0e
+    xor bx, bx
 .loop:
     lodsb
     test al, al
@@ -315,14 +277,13 @@ print_string:
 .done:
     ret
 
-msg_header db "--- CARLEY OS BOOTLOADER v2.1 ---", 13, 10, 0
+msg_header db "--- CARLEY OS BOOTLOADER v2.2 ---", 13, 10, 0
 msg_option1 db "[1] Iniciar Carley OS", 13, 10, 0
 msg_option2 db "[2] Reiniciar", 13, 10, 0
 msg_countdown db 13, "Iniciando en: ", 0
 msg_loading db 13, 10, "Cargando sistema...", 13, 10, 0
-msg_video_info db "Configurando video...", 13, 10, 0
 msg_err_cpu db "ERROR: CPU no soporta 64-bit.", 0
-msg_err_disk db "ERROR: Kernel no encontrado en CarleyFS.", 0
+msg_err_disk db "ERROR: Archivo no encontrado.", 0
 
 [bits 32]
 pm_start:
@@ -332,25 +293,22 @@ pm_start:
     mov ss, ax
     mov esp, 0x90000
 
-    ; 8. Paginación (Higher Half Mappings)
+    ; 8. Paginación (Higher Half)
     mov edi, 0x20000
     mov cr3, edi
     xor eax, eax
     mov ecx, 4096
     rep stosd
 
-    ; PML4[0] -> Identity Map (0-512GB)
-    ; PML4[256] -> HHDM (0xFFFF800000000000)
     mov dword [0x20000], 0x21003
     mov dword [0x20000 + 256*8], 0x21003
-
-    mov dword [0x21000], 0x22003 ; PDPT[0]
-    mov dword [0x21008], 0x23003 ; PDPT[1]
-    mov dword [0x21010], 0x24003 ; PDPT[2]
-    mov dword [0x21018], 0x25003 ; PDPT[3]
+    mov dword [0x21000], 0x22003
+    mov dword [0x21008], 0x23003
+    mov dword [0x21010], 0x24003
+    mov dword [0x21018], 0x25003
 
     mov edi, 0x22000
-    mov eax, 0x00000083 ; 2MB pages
+    mov eax, 0x00000083
     mov ecx, 2048
 map_loop:
     mov [edi], eax
@@ -360,16 +318,14 @@ map_loop:
 
     ; 9. Long Mode
     mov eax, cr4
-    or eax, 1 << 5 ; PAE
+    or eax, 1 << 5
     mov cr4, eax
-
     mov ecx, 0xc0000080
     rdmsr
-    or eax, 1 << 8 ; LME
+    or eax, 1 << 8
     wrmsr
-
     mov eax, cr0
-    or eax, 1 << 31 ; Paging
+    or eax, 1 << 31
     mov cr0, eax
 
     lgdt [gdt_ptr_long]
@@ -383,33 +339,15 @@ long_mode_start:
     mov ss, ax
     mov rsp, 0x9FFFF
 
-    ; Boot Info en 0x6000
-    mov eax, [0x7000 + 40] ; LFB
-    mov [0x6000], rax
+    ; Boot Info
+    mov qword [0x6000], 0xFD000000
     mov dword [0x6008], 1024
     mov dword [0x600c], 768
     mov qword [0x6010], 0x9000
     mov eax, [mem_count_extended]
     mov [0x6018], eax
 
-    ; Buscar RSDP para pasarlo al Kernel
-    xor rbx, rbx
-    mov rsi, 0xE0000
-.search_rsdp:
-    mov rax, [rsi]
-    mov rdx, 0x2052545020445352 ; "RSD PTR "
-    cmp rax, rdx
-    je .found_rsdp
-    add rsi, 16
-    cmp rsi, 0xFFFFF
-    jb .search_rsdp
-    jmp .done_rsdp
-.found_rsdp:
-    mov [0x601C], rsi ; rsdp_address
-.done_rsdp:
-
     mov rdi, 0x6000
-    ; El Kernel está linkeado en 0xFFFF800000100000
     mov rax, 0xFFFF800000100000
     call rax
     jmp $
@@ -435,10 +373,10 @@ dap_lba:
 
 gdt_start:
     dq 0
-    dq 0x00CF9A000000FFFF ; Code 32
-    dq 0x00CF92000000FFFF ; Data 32
-    dq 0x00009A000000FFFF ; Code 16
-    dq 0x000092000000FFFF ; Data 16
+    dq 0x00CF9A000000FFFF
+    dq 0x00CF92000000FFFF
+    dq 0x00009A000000FFFF
+    dq 0x000092000000FFFF
 gdt_end:
 gdt_ptr:
     dw gdt_end - gdt_start - 1
@@ -446,8 +384,8 @@ gdt_ptr:
 
 gdt_start_long:
     dq 0
-    dq 0x00AF9A000000FFFF ; Code 64
-    dq 0x00CF92000000FFFF ; Data 64
+    dq 0x00AF9A000000FFFF
+    dq 0x00CF92000000FFFF
 gdt_end_long:
 gdt_ptr_long:
     dw gdt_end_long - gdt_start_long - 1
