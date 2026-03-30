@@ -13,10 +13,9 @@ stage2_start:
 
     mov [boot_drive], dl
 
-    ; Trace: 'V' (Stage 2 Start)
-    mov ah, 0x0e
-    mov al, 'V'
-    int 0x10
+    ; Trace: Mensaje de Bienvenida claro
+    mov si, msg_welcome
+    call print_string
 
     ; 2. Verificar soporte LBA
     mov ah, 0x41
@@ -26,7 +25,7 @@ stage2_start:
     jnc .lba_ok
     mov si, msg_no_lba
     call print_string
-    jmp .hang
+    jmp hang_forever
 .lba_ok:
 
     ; Reset disco
@@ -86,7 +85,7 @@ stage2_start:
     xor ax, ax
     mov es, ax
 
-    ; Trace: 'M' (Memory Done)
+    ; Trace: 'M'
     mov ah, 0x0e
     mov al, 'M'
     int 0x10
@@ -138,7 +137,8 @@ stage2_start:
     ; Verificar Magic
     mov ax, 0x5000
     mov es, ax
-    cmp dword [es:0x00], 0xCA121E1 ; Magic en offset 0x00
+    xor si, si
+    cmp dword [es:si], 0xCA121E1 ; Magic en offset 0x00
     je .found_sb
 
     cmp dword [dap_lba], 32
@@ -183,10 +183,10 @@ stage2_start:
     push ds
     push es
     mov ax, 0x5100
-    mov ds, ax
-    xor si, si ; Offset 0x00
+    mov ds, ax ; DS = Segmento del buffer (0x5100:0x0000)
     xor ax, ax
-    mov es, ax
+    mov es, ax ; ES = Segmento del código (0x0000:kernel_name)
+    xor si, si ; Offset 0x00
     mov cx, 128
 .search_loop:
     push cx
@@ -197,7 +197,7 @@ stage2_start:
     je .match
     pop si
     pop cx
-    add si, 80
+    add si, 80 ; carleyfs_inode_t = 80 bytes
     loop .search_loop
     pop es
     pop ds
@@ -214,63 +214,25 @@ stage2_start:
     pop es
     pop ds
     xor ax, ax
-    mov gs, ax
+    mov ds, ax
 
     mov [kernel_sectors_left_bytes], eax
     mov [kernel_lba_current], ebx
     mov edi, 0x100000
 
-    ; Unreal Mode
-    push ds
-    lgdt [gdt_ptr]
-    mov eax, cr0
-    or al, 1
-    mov cr0, eax
-    jmp 0x08:.unreal
-[bits 32]
-.unreal:
-    mov bx, 0x10
-    mov ds, bx
-    mov es, bx
-    mov fs, bx
-    mov gs, bx
-    mov eax, cr0
-    and al, 0xFE
-    mov cr0, eax
-    jmp 0x18:.unreal_done
-[bits 16]
-.unreal_done:
-    pop ds
-    xor ax, ax
-    mov es, ax
-
 .load_loop:
+    xor ax, ax
+    mov ds, ax ; Asegurar DS=0 para acceder al DAP
     mov eax, [kernel_lba_current]
     xor edx, edx
     div dword [sector_factor]
     mov [dap_lba], eax
     mov dword [dap_lba + 4], 0
 
-    ; Determinar cuántos sectores (512 bytes) leer (máximo 8KB = 16 sectores para máxima compatibilidad)
-    mov ecx, 16
-    mov eax, [kernel_sectors_left_bytes]
-    add eax, 511
-    shr eax, 9
-    cmp eax, ecx
-    jae .use_max
-    mov ecx, eax
-.use_max:
-    ; ecx = sectores de 512 a leer. Ajustar para la BIOS según sector_factor.
-    mov eax, ecx
-    xor edx, edx
-    div dword [sector_factor]
-    test eax, eax
-    jnz .count_ok
-    inc ax ; Al menos 1 sector físico
-.count_ok:
-    mov [dap + 2], ax
+    ; Leer de a 1 sector físico
+    mov word [dap + 2], 1
     mov word [dap + 4], 0x0000
-    mov word [dap + 6], 0x6000 ; Buffer 0x60000
+    mov word [dap + 6], 0x2000 ; Buffer 0x20000 (Seguro y alineado)
 
     mov si, dap
     mov dl, [boot_drive]
@@ -278,29 +240,55 @@ stage2_start:
     int 0x13
     jc disk_error_s2
 
-    ; Copiar a memoria alta
-    ; Calculamos dwords a copiar: (sectores_fisicos * bytes_por_sector) / 4
-    movzx eax, word [dap + 2]
-    mov ebx, [sector_factor]
-    imul eax, ebx
-    shl eax, 7 ; sectores_512 * 128 = dwords
-    push ecx
+    ; Entrar en Modo Protegido de 32 bits solo para copiar
+    cli
+    lgdt [gdt_ptr]
+    mov eax, cr0
+    or al, 1
+    mov cr0, eax
+    jmp 0x08:.pm_copy
+
+[bits 32]
+.pm_copy:
+    mov bx, 0x10
+    mov ds, bx
+    mov es, bx
+
+    ; Bytes a copiar = sector_factor * 512
+    mov eax, [0x7E00 + (sector_factor - stage2_start)]
+    shl eax, 7 ; dwords
     mov ecx, eax
-    mov esi, 0x60000
-.copy:
-    mov eax, [gs:esi]
-    mov [gs:edi], eax
+    mov esi, 0x20000
+.copy_pm:
+    mov eax, [esi]
+    mov [edi], eax
     add esi, 4
     add edi, 4
-    loop .copy
-    pop ecx
+    loop .copy_pm
+
+    ; Volver a Modo Real
+    mov eax, cr0
+    and al, 0xFE
+    mov cr0, eax
+    jmp 0x00:.real_back_near
+.real_back_near:
+    ; Salto lejano para recargar CS
+    db 0xEA
+    dw .real_back
+    dw 0x0000
+
+[bits 16]
+.real_back:
+    xor ax, ax
+    mov ds, ax
+    mov es, ax
+    mov ss, ax
+    sti
 
     ; Actualizar contadores
-    movzx eax, word [dap + 2]
-    mov ebx, [sector_factor]
-    imul eax, ebx ; sectores de 512 leídos
+    mov eax, [sector_factor]
     add [kernel_lba_current], eax
-    shl eax, 9 ; bytes leídos
+    shl eax, 9 ; bytes
 
     cmp [kernel_sectors_left_bytes], eax
     jbe .kernel_ok
@@ -308,7 +296,7 @@ stage2_start:
     jmp .load_loop
 
 .kernel_ok:
-    ; Trace: 'K' (Kernel Jump)
+    ; Trace: 'K'
     mov ah, 0x0e
     mov al, 'K'
     int 0x10
@@ -330,16 +318,14 @@ disk_error_s2:
     call print_string
     mov al, ah
     call print_hex
-.hang:
-    hlt
-    jmp .hang
+    jmp hang_forever
 
 kernel_not_found_err:
     mov si, msg_kernel_err
     call print_string
-.hang:
+hang_forever:
     hlt
-    jmp .hang
+    jmp hang_forever
 
 print_string:
     mov ah, 0x0e
@@ -373,6 +359,7 @@ print_hex:
     ret
 
 kernel_name db "kernel", 0
+msg_welcome db "CARLEY BOOTLOADER v6", 13, 10, 0
 msg_disk_err db "ERR: DISK ", 0
 msg_kernel_err db "ERR: KERNEL NOT FOUND", 0
 msg_no_lba db "ERR: NO LBA SUPPORT", 0
