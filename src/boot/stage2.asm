@@ -2,10 +2,13 @@
 [org 0x8000]
 
 stage2_start:
-    ; Imprimir '1', '2', '3' para confirmar salto
-    mov ah, 0x0e
-    mov al, '1'
+    ; Imprimir debug ultra-temprano: '!'
+    mov ax, 0x0e21 ; '!'
     xor bx, bx
+    int 0x10
+
+    ; '1', '2', '3'
+    mov al, '1'
     int 0x10
     mov al, '2'
     int 0x10
@@ -22,7 +25,7 @@ actual_start:
     mov es, ax
     mov [boot_drive], dl
 
-    ; Imprimir 'S' - Stage 2 iniciado
+    ; Imprimir 'S' (Stage 2 started)
     mov ah, 0x0e
     mov al, 'S'
     int 0x10
@@ -32,7 +35,7 @@ actual_start:
     or al, 2
     out 0x92, al
 
-    ; Imprimir 'A'
+    ; Imprimir 'A' (A20 done)
     mov ah, 0x0e
     mov al, 'A'
     int 0x10
@@ -51,12 +54,12 @@ do_e820:
     jne e820_done
     add di, 24
     inc dword [mem_count_extended]
-    cmp dword [mem_count_extended], 128
+    cmp dword [mem_count_extended], 128 ; Límite de seguridad
     jae e820_done
     test ebx, ebx
     jne do_e820
 e820_done:
-    ; Imprimir 'E'
+    ; Imprimir 'E' (E820 done)
     mov ah, 0x0e
     mov al, 'E'
     int 0x10
@@ -71,7 +74,7 @@ e820_done:
     test edx, 1 << 29
     jz no_long_mode
 
-    ; Imprimir 'C'
+    ; Imprimir 'C' (CPU 64-bit verified)
     mov ah, 0x0e
     mov al, 'C'
     int 0x10
@@ -80,12 +83,16 @@ e820_done:
     call clear_screen
     mov si, msg_header
     call print_string
+
+    mov ah, 0x0e
+    mov al, 'M'
+    int 0x10
     mov si, msg_option1
     call print_string
     mov si, msg_option2
     call print_string
 
-    mov cx, 5
+    mov cx, 5 ; 5 segundos
 boot_menu_loop:
     mov si, msg_countdown
     call print_string
@@ -128,11 +135,16 @@ start_loading:
     mov si, msg_loading
     call print_string
 
+    mov ah, 0x0e
+    mov al, 'L'
+    int 0x10
+
     ; 5. Cargar el Kernel desde CarleyFS
+    ; Usar buffer en 0x1000:0x0000 (0x10000) para evitar solapamientos con el cargador
     ; Leer Superbloque (LBA 64)
     mov dword [dap_lba], 64
     mov word [dap_count], 1
-    mov word [dap_segment], 0x1000
+    mov word [dap_segment], 0x1000 ; 0x10000 físico
     mov word [dap_offset], 0x0000
     mov si, dap
     mov dl, [boot_drive]
@@ -146,7 +158,7 @@ start_loading:
     cmp eax, 0xCA121E1
     jne disk_error_stage2
 
-    ; Leer Tabla de Inodos (LBA 65)
+    ; Leer Tabla de Inodos (LBA 65, 32 sectores) a 0x10200 físico
     mov dword [dap_lba], 65
     mov word [dap_count], 32
     mov word [dap_segment], 0x1020
@@ -155,7 +167,7 @@ start_loading:
     int 0x13
     jc disk_error_stage2
 
-    ; Buscar "kernel"
+    ; Buscar "kernel" en el buffer de inodos (DS:0)
     mov ax, 0x1020
     mov ds, ax
     xor si, si
@@ -175,6 +187,7 @@ search_kernel:
 
 found_kernel_inode:
     mov eax, [si + 64] ; size
+    ; Volver a segmento 0 para guardar variables y usar Unreal Mode
     xor bx, bx
     mov es, bx
     mov [es:kernel_sectors_left_bytes], eax
@@ -182,6 +195,7 @@ found_kernel_inode:
     mov [es:kernel_lba_current], eax
     mov edi, 0x100000
 
+    ; Entrar en Unreal Mode para cargar directamente a 1MB
     push ds
     xor ax, ax
     mov ds, ax
@@ -211,7 +225,7 @@ load_kernel_loop:
     mov eax, [kernel_lba_current]
     mov [dap_lba], eax
     mov word [dap_count], 64
-    mov word [dap_segment], 0x4000 ; Buffer en 0x40000
+    mov word [dap_segment], 0x4000 ; Buffer temporal en 0x40000
     mov word [dap_offset], 0x0000
     mov si, dap
     mov dl, [boot_drive]
@@ -219,6 +233,7 @@ load_kernel_loop:
     int 0x13
     jc disk_error_stage2
 
+    ; Copiar usando GS (Unreal Mode) para evitar colisiones
     mov ecx, (64 * 512) / 4
     mov esi, 0x40000
 .inner_copy:
@@ -227,10 +242,6 @@ load_kernel_loop:
     add esi, 4
     add edi, 4
     loop .inner_copy
-
-    mov ah, 0x0e
-    mov al, '.'
-    int 0x10
 
     add dword [kernel_lba_current], 64
     cmp dword [kernel_sectors_left_bytes], (64 * 512)
@@ -245,7 +256,11 @@ kernel_loaded:
 
     ; 6. Configurar Modo de Video VBE
     mov ax, 0x4f02
-    mov bx, 0x4118 ; 1024x768x32
+    mov bx, 0x4118 ; 1024x768x32 LFB
+    int 0x10
+
+    mov ah, 0x0e
+    mov al, 'V'
     int 0x10
 
     ; 7. Paso a Modo Protegido
@@ -277,7 +292,7 @@ print_string:
 .done:
     ret
 
-msg_header db "--- CARLEY OS BOOTLOADER v2.2 ---", 13, 10, 0
+msg_header db "--- CARLEY OS BOOTLOADER v2.3 ---", 13, 10, 0
 msg_option1 db "[1] Iniciar Carley OS", 13, 10, 0
 msg_option2 db "[2] Reiniciar", 13, 10, 0
 msg_countdown db 13, "Iniciando en: ", 0
@@ -293,7 +308,7 @@ pm_start:
     mov ss, ax
     mov esp, 0x90000
 
-    ; 8. Paginación (Higher Half)
+    ; 8. Paginación
     mov edi, 0x20000
     mov cr3, edi
     xor eax, eax

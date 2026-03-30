@@ -9,7 +9,7 @@ start:
     mov ss, ax
     mov sp, 0x7c00
 
-    ; Salto largo para asegurar CS = 0
+    ; Asegurar CS = 0
     jmp 0:.next
 .next:
     mov [boot_drive], dl
@@ -39,15 +39,15 @@ start:
     jnc .jump_now
 
 .no_lba:
-    ; 'C' - Fallback a CHS
+    ; 'C' - Usando CHS
     mov ax, 0x0e43
     xor bx, bx
     int 0x10
 
     xor ax, ax
     mov es, ax
-    mov bx, 0x8000 ; Destino
-    mov ax, 0x021f ; Leer 31 sectores
+    mov bx, 0x8000 ; Destino 0x8000
+    mov ax, 0x0210 ; Leer 16 sectores
     mov cx, 0x0002 ; Sector 2, Cilindro 0
     mov dh, 0      ; Cabeza 0
     mov dl, [boot_drive]
@@ -58,6 +58,10 @@ start:
     ; 'J' - Cargado
     mov ax, 0x0e4a
     xor bx, bx
+    int 0x10
+
+    ; '>' - Saltando a Stage 2
+    mov al, '>'
     int 0x10
 
     mov dl, [boot_drive]
@@ -76,10 +80,10 @@ align 16
 dap_stage2:
     db 0x10
     db 0
-    dw 31          ; Cantidad sectores
+    dw 31          ; Sectores
     dw 0x8000      ; Offset
     dw 0x0000      ; Segmento
-    dq 1           ; LBA inicial
+    dq 1           ; LBA 1
 
 times 510-($-$$) db 0
 dw 0xaa55
