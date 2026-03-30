@@ -83,22 +83,80 @@ stage2_start:
     int 0x10
 
     ; 4. Cargar el Kernel desde el disco (LBA 256+)
-    ; Buscamos en el sistema de archivos CarleyFS (LBA 128)
-    mov dword [dap_lba], 128 ; Superbloque
+    ; Buscamos en el sistema de archivos CarleyFS.
+    ; Intentamos LBA 128 (512-byte sectors) o LBA 32 (2048-byte sectors)
+    mov dword [dap_lba], 128
+.try_read_sb:
     mov word [dap_count], 1
     mov word [dap_segment], 0x1000 ; Buffer 0x10000
     mov word [dap_offset], 0x0000
-    mov si, dap
+
+    mov cx, 3 ; 3 intentos
+.retry_sb:
+    push cx
+    ; Reset disk
+    xor ax, ax
     mov dl, [boot_drive]
+    int 0x13
+
+    mov si, dap
     mov ah, 0x42
     int 0x13
-    jc disk_error_s2
+    pop cx
+    jnc .sb_read_ok
+    loop .retry_sb
 
+    ; Si falló LBA 128, probamos LBA 32 (Modo CD-ROM puro)
+    cmp dword [dap_lba], 32
+    je disk_error_s2
+    mov dword [dap_lba], 32
+    jmp .try_read_sb
+
+.sb_read_ok:
     ; Verificar Magic (usando GS para no contaminar DS)
     mov ax, 0x1000
     mov gs, ax
     cmp dword [gs:0], 0xCA121E1
-    jne disk_error_s2
+    je .found_sb
+
+    ; Si el magic es incorrecto, probamos el otro LBA
+    cmp dword [dap_lba], 32
+    je disk_error_s2
+    mov dword [dap_lba], 32
+    jmp .try_read_sb
+
+.found_sb:
+    ; Calcular factor de sector (si LBA 32 funcionó, necesitamos dividir los LBAs por 4)
+    mov dword [sector_factor], 1
+    cmp dword [dap_lba], 32
+    jne .read_inodes
+    mov dword [sector_factor], 4
+
+.read_inodes:
+    ; Leer Inodos (LBA 132 o 33)
+    mov eax, 132
+    xor edx, edx
+    div dword [sector_factor]
+    mov [dap_lba], eax
+
+    mov word [dap_count], 32
+    mov word [dap_segment], 0x1020 ; Buffer 0x10200
+
+    mov cx, 3
+.retry_inodes:
+    push cx
+    xor ax, ax
+    mov dl, [boot_drive]
+    int 0x13
+    mov si, dap
+    mov ah, 0x42
+    int 0x13
+    pop cx
+    jnc .inodes_ok
+    loop .retry_inodes
+    jmp disk_error_s2
+
+.inodes_ok:
 
     ; Leer Inodos (LBA 132)
     mov dword [dap_lba], 132
@@ -119,9 +177,11 @@ stage2_start:
     mov cx, 64
 .search_loop:
     push cx
+    push si
     mov di, kernel_name
     mov cx, 6
     repe cmpsb
+    pop si
     pop cx
     je .found_kernel
     add si, 80
@@ -167,7 +227,10 @@ stage2_start:
 
 .load_loop:
     mov eax, [kernel_lba_current]
+    xor edx, edx
+    div dword [sector_factor]
     mov [dap_lba], eax
+
     mov word [dap_count], 64
     mov word [dap_segment], 0x4000 ; Buffer 0x40000
     mov si, dap
@@ -218,7 +281,9 @@ disk_error_s2:
     pop ax
     mov al, ah ; Error code from int 13h is in AH
     call print_hex
+.hang:
     hlt
+    jmp .hang
 
 ; Helper to print AL as hex
 print_hex:
@@ -322,6 +387,7 @@ long_mode_start:
 ; --- Datos ---
 mem_count_extended dd 0
 rsdp_addr_low dd 0
+sector_factor dd 1
 boot_drive db 0
 kernel_sectors_left_bytes dd 0
 kernel_lba_current dd 0
