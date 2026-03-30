@@ -162,21 +162,26 @@ stage2_start:
     mov si, 0x10 ; Offset 0x10 por la carga anterior
     xor ax, ax
     mov es, ax
-    mov cx, 64
+    mov cx, 128
 .search_loop:
     push cx
     push si
     mov di, kernel_name
     mov cx, 6
     repe cmpsb
+    je .match
     pop si
     pop cx
-    je .found_kernel
     add si, 80
     loop .search_loop
     pop es
     pop ds
     jmp kernel_not_found_err
+
+.match:
+    pop si
+    pop cx
+    jmp .found_kernel
 
 .found_kernel:
     mov eax, [si + 64] ; size
@@ -221,13 +226,26 @@ stage2_start:
     mov [dap_lba], eax
     mov dword [dap_lba + 4], 0
 
-    ; Cargamos de 16KB en 16KB
-    mov eax, 32
+    ; Determinar cuántos sectores (512 bytes) leer (máximo 16KB = 32 sectores)
+    mov ecx, 32
+    mov eax, [kernel_sectors_left_bytes]
+    add eax, 511
+    shr eax, 9
+    cmp eax, ecx
+    jae .use_max
+    mov ecx, eax
+.use_max:
+    ; ecx = sectores de 512 a leer. Ajustar para la BIOS según sector_factor.
+    mov eax, ecx
     xor edx, edx
     div dword [sector_factor]
+    test eax, eax
+    jnz .count_ok
+    inc ax ; Al menos 1 sector físico
+.count_ok:
     mov [dap + 2], ax
     mov word [dap + 4], 0x0010
-    mov word [dap + 6], 0x4000 ; Buffer 0x40010 (Seguro, no cruza 0x50000)
+    mov word [dap + 6], 0x4000 ; Buffer 0x40010
 
     mov si, dap
     mov dl, [boot_drive]
@@ -235,7 +253,14 @@ stage2_start:
     int 0x13
     jc disk_error_s2
 
-    mov ecx, 4096
+    ; Copiar a memoria alta
+    ; Calculamos dwords a copiar: (sectores_fisicos * bytes_por_sector) / 4
+    movzx eax, word [dap + 2]
+    mov ebx, [sector_factor]
+    imul eax, ebx
+    shl eax, 7 ; sectores_512 * 128 = dwords
+    push ecx
+    mov ecx, eax
     mov esi, 0x40010
 .copy:
     mov eax, [gs:esi]
@@ -243,11 +268,18 @@ stage2_start:
     add esi, 4
     add edi, 4
     loop .copy
+    pop ecx
 
-    add dword [kernel_lba_current], 32
-    cmp dword [kernel_sectors_left_bytes], 16384
+    ; Actualizar contadores
+    movzx eax, word [dap + 2]
+    mov ebx, [sector_factor]
+    imul eax, ebx ; sectores de 512 leídos
+    add [kernel_lba_current], eax
+    shl eax, 9 ; bytes leídos
+
+    cmp [kernel_sectors_left_bytes], eax
     jbe .kernel_ok
-    sub dword [kernel_sectors_left_bytes], 16384
+    sub [kernel_sectors_left_bytes], eax
     jmp .load_loop
 
 .kernel_ok:

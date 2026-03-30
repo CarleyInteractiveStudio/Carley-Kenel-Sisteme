@@ -65,13 +65,14 @@ int main(int argc, char **argv) {
             start = INITRD_SECTOR;
         }
 
-        // ALINEACIÓN CRÍTICA: Forzamos alineación a 2048 bytes (4 sectores lógicos)
-        // Esto asegura que cada archivo empiece al inicio de un sector físico de CD.
+        // ALINEACIÓN CRÍTICA: Forzamos alineación a 2048 bytes (4 sectores lógicos de 512)
+        // Esto asegura que cada archivo empiece al inicio de un sector físico de CD de 2048 bytes.
+        // El Superbloque (128) y los Inodos (132) ya están alineados a 2048 (128 % 4 == 0, 132 % 4 == 0).
         if (start != INITRD_SECTOR) {
             start = (start + 3) & ~3;
         }
 
-        img.seekp(start * 512, std::ios::beg);
+        img.seekp((long long)start * 512, std::ios::beg);
         img.write(buf.data(), buf.size());
 
         std::strncpy(inodes[sb.num_inodes].name, name, 63);
