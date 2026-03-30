@@ -2,26 +2,27 @@
 [org 0x7E00]
 
 stage2_start:
-    ; 1. Normalización estricta de registros
+    ; 1. Normalización total de registros
     cli
     xor ax, ax
     mov ds, ax
     mov es, ax
     mov ss, ax
-    mov sp, 0x7C00 ; Pila segura lejos del código
+    mov sp, 0x7C00
 
-    ; Trace: 'S' (Stage 2 iniciado)
+    mov [boot_drive], dl
+
+    ; Trace: 'S' (Stage 2)
     mov ax, 0x0e53
     xor bx, bx
     int 0x10
 
-    mov [boot_drive], dl
-
-    ; 2. Hardware: A20 y Memoria
+    ; 2. Hardware init: A20
     in al, 0x92
     or al, 2
     out 0x92, al
 
+    ; Detectar Memoria E820
     mov di, 0x9000
     xor ebx, ebx
     mov edx, 0x534D4150
@@ -37,22 +38,21 @@ stage2_start:
     jne .do_e820
 .e820_done:
 
-    ; Trace: 'E' (Memoria OK)
+    ; Trace: 'E'
     mov ax, 0x0e45
-    xor bx, bx
     int 0x10
 
     ; 3. Detección REAL de Video (Evita Error Crítico en VBox)
     mov ax, 0x4f01
-    mov cx, 0x118   ; 1024x768x32
-    mov di, 0x7000  ; Buffer para ModeInfo
+    mov cx, 0x4118 ; 1024x768x32
+    mov di, 0x7000 ; ModeInfoBlock
     int 0x10
 
-    ; 4. Cargar el Kernel desde CarleyFS (LBA 64+)
-    ; Leer Superbloque (LBA 64)
-    mov dword [dap_lba], 64
+    ; 4. Cargar el Kernel desde el disco (LBA 256+)
+    ; Buscamos en el sistema de archivos CarleyFS (LBA 128)
+    mov dword [dap_lba], 128 ; Superbloque
     mov word [dap_count], 1
-    mov word [dap_segment], 0x1000 ; Buffer temporal en 0x10000
+    mov word [dap_segment], 0x1000 ; Buffer 0x10000
     mov word [dap_offset], 0x0000
     mov si, dap
     mov dl, [boot_drive]
@@ -60,55 +60,53 @@ stage2_start:
     int 0x13
     jc disk_error_s2
 
-    ; Verificar Magic del FS (usando GS para no tocar DS)
+    ; Verificar Magic (usando GS para no contaminar DS)
     mov ax, 0x1000
     mov gs, ax
     cmp dword [gs:0], 0xCA121E1
     jne disk_error_s2
 
-    ; Leer Tabla de Inodos (LBA 65, 32 sectores)
-    mov dword [dap_lba], 65
+    ; Leer Inodos (LBA 132)
+    mov dword [dap_lba], 132
     mov word [dap_count], 32
-    mov word [dap_segment], 0x1020 ; Buffer inodos en 0x10200
-    mov si, dap
-    mov ah, 0x42
+    mov word [dap_segment], 0x1020 ; Buffer 0x10200
     int 0x13
     jc disk_error_s2
 
     ; Buscar "kernel"
-    ; Usamos ES para el nombre y DS para los inodos temporalmente, pero restauramos DS
+    ; PROTECCIÓN: Empujamos DS y ES
     push ds
+    push es
     mov ax, 0x1020
-    mov ds, ax
+    mov ds, ax     ; DS -> Inodos
     xor si, si
-    mov cx, 64 ; Máximo 64 inodos
+    mov ax, 0
+    mov es, ax     ; ES -> kernel_name
+    mov cx, 64
 .search_loop:
     push cx
     mov di, kernel_name
-    push ds
-    xor ax, ax
-    mov ds, ax
-    mov es, ax ; ES:DI -> kernel_name (en segmento 0)
-    pop ds     ; DS:SI -> inodo actual (en segmento 0x1020)
     mov cx, 6
     repe cmpsb
     pop cx
     je .found_kernel
-    add si, 80 ; Siguiente inodo
+    add si, 80
     loop .search_loop
+    pop es
     pop ds
     jmp disk_error_s2
 
 .found_kernel:
     mov eax, [si + 64] ; size
-    mov ebx, [si + 68] ; start_sector
-    pop ds ; RESTAURAR DS = 0 (Crucial para el DAP)
+    mov ebx, [si + 68] ; start sector
+    pop es
+    pop ds ; DS RESTAURADO A 0 (Seguridad total)
 
     mov [kernel_sectors_left_bytes], eax
     mov [kernel_lba_current], ebx
     mov edi, 0x100000 ; Destino final (1MB)
 
-    ; Unreal Mode para escribir en 1MB
+    ; Unreal Mode para escribir en memoria extendida
     push ds
     lgdt [gdt_ptr]
     mov eax, cr0
@@ -132,45 +130,45 @@ stage2_start:
     xor ax, ax
     mov es, ax
 
-.load_kernel:
+.load_loop:
     mov eax, [kernel_lba_current]
     mov [dap_lba], eax
     mov word [dap_count], 64
-    mov word [dap_segment], 0x4000 ; Buffer temporal 0x40000
+    mov word [dap_segment], 0x4000 ; Buffer 0x40000
     mov si, dap
-    mov ah, 0x42
     mov dl, [boot_drive]
+    mov ah, 0x42
     int 0x13
     jc disk_error_s2
 
-    ; Copiar de 0x40000 a 1MB usando Unreal Mode
+    ; Copiar a 1MB usando Unreal Mode (GS)
     mov ecx, (64 * 512) / 4
     mov esi, 0x40000
-.copy_to_1mb:
+.copy:
     mov eax, [gs:esi]
     mov [gs:edi], eax
     add esi, 4
     add edi, 4
-    loop .copy_to_1mb
+    loop .copy
 
     add dword [kernel_lba_current], 64
     cmp dword [kernel_sectors_left_bytes], (64 * 512)
     jbe .kernel_ok
     sub dword [kernel_sectors_left_bytes], (64 * 512)
-    jmp .load_kernel
+    jmp .load_loop
 
 .kernel_ok:
-    ; Trace: 'K' (Kernel en RAM)
+    ; Trace: 'K'
     mov ax, 0x0e4b
     xor bx, bx
     int 0x10
 
     ; 5. Activar Modo Gráfico
     mov ax, 0x4f02
-    mov bx, 0x4118 ; 1024x768x32
+    mov bx, 0x4118
     int 0x10
 
-    ; 6. Paso a Modo Protegido y luego Long Mode
+    ; 6. Salto a Modo Protegido
     lgdt [gdt_ptr]
     mov eax, cr0
     or al, 1
@@ -178,8 +176,7 @@ stage2_start:
     jmp 0x08:pm_start
 
 disk_error_s2:
-    ; 'F' - Fail
-    mov ax, 0x0e46
+    mov ax, 0x0e46 ; 'F'
     xor bx, bx
     int 0x10
     hlt
@@ -209,15 +206,15 @@ pm_start:
     mov dword [0x21018], 0x25003
 
     mov edi, 0x22000
-    mov eax, 0x00000083 ; 2MB Pages
+    mov eax, 0x00000083
     mov ecx, 2048
-.map_loop:
+.map:
     mov [edi], eax
     add eax, 0x200000
     add edi, 8
-    loop .map_loop
+    loop .map
 
-    ; 8. Habilitar Long Mode
+    ; 8. Long Mode
     mov eax, cr4
     or eax, 1 << 5
     mov cr4, eax
@@ -238,10 +235,10 @@ long_mode_start:
     mov ds, ax
     mov es, ax
     mov ss, ax
-    mov rsp, 0x9FFF0 ; Pila alineada
+    mov rsp, 0x9FFF0 ; Alineada a 16 bytes
 
-    ; 9. Pasar Boot Info al Kernel
-    mov eax, [0x7000 + 40] ; PhysBasePtr REAL
+    ; 9. Pasar Boot Info
+    mov eax, [0x7000 + 40] ; PhysBasePtr real
     mov [0x6000], rax
     mov dword [0x6008], 1024
     mov dword [0x600c], 768

@@ -3,16 +3,18 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define MAX_INODES 64
-#define SUPERBLOCK_SECTOR 64
-#define INODE_SECTOR_START 65
-#define DATA_SECTOR_START 96
+/* Synchronized with common/config.h */
+#define MAX_INODES 128
+#define SUPERBLOCK_SECTOR 128
+#define INODE_SECTOR_START 132
+#define DATA_SECTOR_START 256
+#define INITRD_SECTOR 20480
 
 typedef struct {
     char name[64];
     uint32_t size;
     uint32_t start_sector;
-    uint32_t type; // 1 = File, 2 = Directory
+    uint32_t type;
     uint32_t used;
 } carleyfs_inode_t;
 
@@ -56,10 +58,6 @@ int main(int argc, char **argv) {
 
     carleyfs_inode_t inodes[MAX_INODES] = {0};
 
-    // Añadir Kernel (LBA 2048 para compatibilidad o según FS)
-    // Para simplificar el cargador, lo pondremos en un LBA fijo o buscaremos.
-    // Lo pondremos en DATA_SECTOR_START.
-
     auto add_file = [&](const char *path, const char *name) {
         FILE *f = fopen(path, "rb");
         if (!f) return;
@@ -71,10 +69,8 @@ int main(int argc, char **argv) {
         fread(buf, 1, size, f);
 
         uint32_t start = sb.next_free_sector;
-
-        // Sincronizar con el sector hardcodeado en el Kernel (initrd.c)
         if (strcmp(name, "initrd") == 0) {
-            start = 20480;
+            start = INITRD_SECTOR;
         }
 
         fseek(img, (long)start * 512, SEEK_SET);
@@ -87,8 +83,6 @@ int main(int argc, char **argv) {
         inodes[sb.num_inodes].used = 1;
 
         sb.num_inodes++;
-
-        // Solo avanzar el puntero secuencial si no es el initrd (zona especial)
         if (start == sb.next_free_sector) {
             sb.next_free_sector += (size + 511) / 512;
         }
@@ -101,15 +95,15 @@ int main(int argc, char **argv) {
     if (argc > 4) add_file(argv[4], "initrd");
     if (argc > 5) add_file(argv[5], "ap_trampoline");
 
-    // Escribir Superbloque (LBA 64)
+    // Escribir Superbloque (LBA 128)
     fseek(img, SUPERBLOCK_SECTOR * 512, SEEK_SET);
     fwrite(&sb, 1, 512, img);
 
-    // Escribir Tabla de Inodos (LBA 65)
+    // Escribir Tabla de Inodos (LBA 132)
     fseek(img, 512 * INODE_SECTOR_START, SEEK_SET);
     fwrite(inodes, sizeof(carleyfs_inode_t), MAX_INODES, img);
 
     fclose(img);
-    printf("CarleyFS: Imagen generada con %u archivos.\n", sb.num_inodes);
+    printf("CarleyFS: Imagen generada con %u archivos y alineación CD.\n", sb.num_inodes);
     return 0;
 }

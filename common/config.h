@@ -12,12 +12,13 @@
 /* Page Size (4KB) */
 #define PAGE_SIZE 4096
 
-/* CarleyFS Constants - Synchronized with format_carleyfs and stage2 */
+/* CarleyFS Constants - Professional Sector Alignment (LBA) */
+/* 2048-byte CD compatibility mode */
 #define CARLEYFS_MAGIC 0xCA121E1
-#define CARLEYFS_SUPERBLOCK_SECTOR 64
-#define CARLEYFS_INODE_SECTOR 65
-#define CARLEYFS_DATA_SECTOR 96
+#define CARLEYFS_SUPERBLOCK_SECTOR 128
+#define CARLEYFS_INODE_SECTOR 132
+#define CARLEYFS_DATA_SECTOR 256
 #define CARLEYFS_INITRD_SECTOR 20480
-#define CARLEYFS_MAX_INODES 64
+#define CARLEYFS_MAX_INODES 128
 
 #endif
