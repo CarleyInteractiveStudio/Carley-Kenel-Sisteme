@@ -82,24 +82,24 @@ stage2_start:
     mov di, 0x7000 ; ModeInfoBlock
     int 0x10
 
-    ; 4. Cargar el Kernel desde el disco (LBA 256+)
+    ; 4. Cargar el Kernel desde el disco (LBA 128+)
     ; Buscamos en el sistema de archivos CarleyFS.
     ; Intentamos LBA 128 (512-byte sectors) o LBA 32 (2048-byte sectors)
     mov dword [dap_lba], 128
+    mov dword [dap_lba + 4], 0
 .try_read_sb:
-    mov word [dap_count], 1
-    mov word [dap_segment], 0x1000 ; Buffer 0x10000
-    mov word [dap_offset], 0x0000
+    ; Configurar DAP manualmente para máxima seguridad
+    mov byte [dap], 0x10
+    mov byte [dap + 1], 0
+    mov word [dap + 2], 1      ; count
+    mov word [dap + 4], 0x0000 ; offset
+    mov word [dap + 6], 0x2000 ; segment (Buffer 0x20000)
 
     mov cx, 3 ; 3 intentos
 .retry_sb:
     push cx
-    ; Reset disk
-    xor ax, ax
-    mov dl, [boot_drive]
-    int 0x13
-
     mov si, dap
+    mov dl, [boot_drive]
     mov ah, 0x42
     int 0x13
     pop cx
@@ -113,8 +113,8 @@ stage2_start:
     jmp .try_read_sb
 
 .sb_read_ok:
-    ; Verificar Magic (usando GS para no contaminar DS)
-    mov ax, 0x1000
+    ; Verificar Magic
+    mov ax, 0x2000
     mov gs, ax
     cmp dword [gs:0], 0xCA121E1
     je .found_sb
@@ -139,16 +139,15 @@ stage2_start:
     div dword [sector_factor]
     mov [dap_lba], eax
 
-    mov word [dap_count], 32
-    mov word [dap_segment], 0x1020 ; Buffer 0x10200
+    mov word [dap + 2], 32     ; count
+    mov word [dap + 4], 0x0000 ; offset
+    mov word [dap + 6], 0x2100 ; segment (Buffer 0x21000)
 
     mov cx, 3
 .retry_inodes:
     push cx
-    xor ax, ax
-    mov dl, [boot_drive]
-    int 0x13
     mov si, dap
+    mov dl, [boot_drive]
     mov ah, 0x42
     int 0x13
     pop cx
@@ -158,14 +157,13 @@ stage2_start:
 
 .inodes_ok:
     ; Buscar "kernel"
-    ; PROTECCIÓN: Empujamos DS y ES
     push ds
     push es
-    mov ax, 0x1020
-    mov ds, ax     ; DS -> Inodos (Donde acabamos de cargar los inodos)
+    mov ax, 0x2100
+    mov ds, ax     ; DS -> Inodos
     xor si, si
     mov ax, 0
-    mov es, ax     ; ES -> kernel_name (En el segmento 0)
+    mov es, ax     ; ES -> kernel_name
     mov cx, 64
 .search_loop:
     push cx
@@ -186,7 +184,7 @@ stage2_start:
     mov eax, [si + 64] ; size
     mov ebx, [si + 68] ; start sector
     pop es
-    pop ds ; DS RESTAURADO A 0 (Seguridad total)
+    pop ds ; DS RESTAURADO A 0
     xor ax, ax
     mov gs, ax ; Limpiar GS con 0
 
@@ -219,13 +217,17 @@ stage2_start:
     mov es, ax
 
 .load_loop:
+    ; Calcular LBA ajustada por sector_factor
     mov eax, [kernel_lba_current]
     xor edx, edx
     div dword [sector_factor]
     mov [dap_lba], eax
 
-    mov word [dap_count], 64
-    mov word [dap_segment], 0x4000 ; Buffer 0x40000
+    ; Leer solo 16 sectores (8KB) para evitar errores DMA y límites de 64KB
+    mov word [dap + 2], 16     ; count
+    mov word [dap + 4], 0x0000 ; offset
+    mov word [dap + 6], 0x4000 ; segment (Buffer 0x40000)
+
     mov si, dap
     mov dl, [boot_drive]
     mov ah, 0x42
@@ -233,7 +235,7 @@ stage2_start:
     jc disk_error_s2
 
     ; Copiar a 1MB usando Unreal Mode (GS)
-    mov ecx, (64 * 512) / 4
+    mov ecx, (16 * 512) / 4
     mov esi, 0x40000
 .copy:
     mov eax, [gs:esi]
@@ -242,10 +244,10 @@ stage2_start:
     add edi, 4
     loop .copy
 
-    add dword [kernel_lba_current], 64
-    cmp dword [kernel_sectors_left_bytes], (64 * 512)
+    add dword [kernel_lba_current], 16
+    cmp dword [kernel_sectors_left_bytes], (16 * 512)
     jbe .kernel_ok
-    sub dword [kernel_sectors_left_bytes], (64 * 512)
+    sub dword [kernel_sectors_left_bytes], (16 * 512)
     jmp .load_loop
 
 .kernel_ok:
@@ -404,12 +406,8 @@ kernel_sectors_left_bytes dd 0
 kernel_lba_current dd 0
 
 align 16
-dap:
-    db 0x10, 0
-dap_count: dw 0
-dap_offset: dw 0
-dap_segment: dw 0
-dap_lba: dq 0
+dap: times 16 db 0
+dap_lba equ dap + 8
 
 gdt_start:
     dq 0
