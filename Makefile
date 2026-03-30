@@ -72,7 +72,7 @@ iso: carley-os.img bootloader
 		-V "CARLEY_OS" \
 		-b carley-os.img \
 		-no-emul-boot \
-		-boot-load-size 32 \
+		-boot-load-size 64 \
 		-o carley-os.iso iso_root || \
 	(echo "Error: xorriso falló al crear ISO." && rm -rf iso_root && exit 1)
 	# Aplicamos isohybrid si está disponible para asegurar compatibilidad total

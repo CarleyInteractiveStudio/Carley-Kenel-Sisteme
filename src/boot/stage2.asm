@@ -2,20 +2,36 @@
 [org 0x7E00]
 
 stage2_start:
-    ; 1. Normalización total de registros
+    ; 1. Normalización total de registros y estado
     cli
+    cld
     xor ax, ax
     mov ds, ax
     mov es, ax
     mov ss, ax
-    mov sp, 0x7C00
+    mov sp, 0x7C00 ; Pila debajo del MBR
 
     mov [boot_drive], dl
 
-    ; Trace: 'S' (Stage 2)
-    mov ax, 0x0e53
-    xor bx, bx
+    ; Trace: 'V' (Stage 2 Start)
+    mov ah, 0x0e
+    mov al, 'V'
     int 0x10
+
+    ; 2. Verificar soporte LBA
+    mov ah, 0x41
+    mov bx, 0x55AA
+    mov dl, [boot_drive]
+    int 0x13
+    jnc .lba_ok
+    mov si, msg_no_lba
+    call print_string
+    jmp .hang
+.lba_ok:
+
+    ; Reset disco
+    xor ax, ax
+    int 0x13
 
     ; 2. Hardware init: A20
     in al, 0x92
@@ -70,29 +86,32 @@ stage2_start:
     xor ax, ax
     mov es, ax
 
-    ; Trace: 'E'
-    mov ax, 0x0e45
+    ; Trace: 'M' (Memory Done)
+    mov ah, 0x0e
+    mov al, 'M'
     int 0x10
 
-    ; 3. Detección de Video
+    ; 4. Detección de Video
     mov ax, 0x4f01
     mov cx, 0x4118 ; 1024x768x32
     mov di, 0x7000 ; ModeInfoBlock
     int 0x10
 
     ; 4. Cargar el Kernel
+    ; Buffer Seguro: 0x4000:0x0010 (Físico 0x40010). NO está en frontera de 64KB.
+
     ; Intentamos LBA 128 (HDD) o LBA 32 (ISO 2048-bytes)
     mov dword [dap_lba], 128
     mov dword [dap_lba + 4], 0
 .try_read_sb:
-    ; Reset DAP para evitar basura de BIOS previas
+    ; Reset DAP con alineación estricta a 0x0000 para VirtualBox SATA
     mov byte [dap], 0x10
     mov byte [dap + 1], 0
     mov word [dap + 2], 1      ; count
-    mov word [dap + 4], 0x0010 ; offset (Evitamos exactamente 0x0000)
-    mov word [dap + 6], 0x2000 ; segment (Buffer 0x20010)
+    mov word [dap + 4], 0x0000 ; offset 0 bytes
+    mov word [dap + 6], 0x5000 ; segment (Buffer 0x50000)
 
-    mov cx, 3
+    mov cx, 5
 .retry_sb:
     push cx
     mov si, dap
@@ -101,6 +120,12 @@ stage2_start:
     int 0x13
     pop cx
     jnc .sb_read_ok
+
+    ; Reset disco en cada fallo
+    push ax
+    xor ax, ax
+    int 0x13
+    pop ax
     loop .retry_sb
 
     ; Si falló 128, probamos 32
@@ -111,9 +136,9 @@ stage2_start:
 
 .sb_read_ok:
     ; Verificar Magic
-    mov ax, 0x2000
-    mov gs, ax
-    cmp dword [gs:0x10], 0xCA121E1
+    mov ax, 0x5000
+    mov es, ax
+    cmp dword [es:0x00], 0xCA121E1 ; Magic en offset 0x00
     je .found_sb
 
     cmp dword [dap_lba], 32
@@ -139,8 +164,8 @@ stage2_start:
     xor edx, edx
     div dword [sector_factor]
     mov [dap + 2], ax
-    mov word [dap + 4], 0x0010 ; offset
-    mov word [dap + 6], 0x2100 ; segment (Buffer 0x21010)
+    mov word [dap + 4], 0x0000 ; offset 0
+    mov word [dap + 6], 0x5100 ; segment (Buffer 0x51000)
 
     mov cx, 3
 .retry_inodes:
@@ -157,9 +182,9 @@ stage2_start:
 .inodes_ok:
     push ds
     push es
-    mov ax, 0x2100
+    mov ax, 0x5100
     mov ds, ax
-    mov si, 0x10 ; Offset 0x10 por la carga anterior
+    xor si, si ; Offset 0x00
     xor ax, ax
     mov es, ax
     mov cx, 128
@@ -226,8 +251,8 @@ stage2_start:
     mov [dap_lba], eax
     mov dword [dap_lba + 4], 0
 
-    ; Determinar cuántos sectores (512 bytes) leer (máximo 16KB = 32 sectores)
-    mov ecx, 32
+    ; Determinar cuántos sectores (512 bytes) leer (máximo 8KB = 16 sectores para máxima compatibilidad)
+    mov ecx, 16
     mov eax, [kernel_sectors_left_bytes]
     add eax, 511
     shr eax, 9
@@ -244,8 +269,8 @@ stage2_start:
     inc ax ; Al menos 1 sector físico
 .count_ok:
     mov [dap + 2], ax
-    mov word [dap + 4], 0x0010
-    mov word [dap + 6], 0x4000 ; Buffer 0x40010
+    mov word [dap + 4], 0x0000
+    mov word [dap + 6], 0x6000 ; Buffer 0x60000
 
     mov si, dap
     mov dl, [boot_drive]
@@ -261,7 +286,7 @@ stage2_start:
     shl eax, 7 ; sectores_512 * 128 = dwords
     push ecx
     mov ecx, eax
-    mov esi, 0x40010
+    mov esi, 0x60000
 .copy:
     mov eax, [gs:esi]
     mov [gs:edi], eax
@@ -283,9 +308,9 @@ stage2_start:
     jmp .load_loop
 
 .kernel_ok:
-    ; Trace: 'K'
-    mov ax, 0x0e4b
-    xor bx, bx
+    ; Trace: 'K' (Kernel Jump)
+    mov ah, 0x0e
+    mov al, 'K'
     int 0x10
 
     ; 5. Activar Modo Gráfico
@@ -350,6 +375,7 @@ print_hex:
 kernel_name db "kernel", 0
 msg_disk_err db "ERR: DISK ", 0
 msg_kernel_err db "ERR: KERNEL NOT FOUND", 0
+msg_no_lba db "ERR: NO LBA SUPPORT", 0
 
 [bits 32]
 pm_start:
