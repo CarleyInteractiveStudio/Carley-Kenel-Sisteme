@@ -2,20 +2,34 @@
 [org 0x8000]
 
 stage2_start:
-    ; Imprimir debug ultra-temprano: '!'
-    mov ax, 0x0e21 ; '!'
-    xor bx, bx
-    int 0x10
+    ; Normalizar registros inmediatamente tras el salto
+    cli
+    xor ax, ax
+    mov ds, ax
+    mov es, ax
+    mov ss, ax
+    mov sp, 0x7C00
 
+    ; '!'
+    mov al, '!'
+    call print_char_s2
     ; '1', '2', '3'
     mov al, '1'
-    int 0x10
+    call print_char_s2
     mov al, '2'
-    int 0x10
+    call print_char_s2
     mov al, '3'
-    int 0x10
+    call print_char_s2
 
     jmp actual_start
+
+print_char_s2:
+    pusha
+    mov ah, 0x0e
+    xor bx, bx
+    int 0x10
+    popa
+    ret
     nop
 
 actual_start:
