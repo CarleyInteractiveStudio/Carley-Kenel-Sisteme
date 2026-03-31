@@ -13,7 +13,7 @@ stage2_start:
 
     mov [boot_drive], dl
 
-    ; Trace: Mensaje de Bienvenida claro
+    ; Trace: Mensaje de Bienvenida
     mov si, msg_welcome
     call print_string
 
@@ -30,9 +30,10 @@ stage2_start:
 
     ; Reset disco
     xor ax, ax
+    mov dl, [boot_drive]
     int 0x13
 
-    ; 2. Hardware init: A20
+    ; 3. Hardware init: A20
     in al, 0x92
     or al, 2
     out 0x92, al
@@ -53,7 +54,7 @@ stage2_start:
     jne .do_e820
 .e820_done:
 
-    ; Buscar RSDP (ACPI) en 0xE0000 - 0xFFFFF
+    ; Buscar RSDP (ACPI)
     mov dword [rsdp_addr_low], 0
     mov ax, 0xE000
     mov es, ax
@@ -66,7 +67,6 @@ stage2_start:
 .next_rsdp:
     add di, 16
     jnz .search_rsdp
-    ; Probar segmento 0xF000
     mov ax, es
     cmp ax, 0xF000
     je .rsdp_done
@@ -85,66 +85,43 @@ stage2_start:
     xor ax, ax
     mov es, ax
 
-    ; Trace: 'M'
-    mov ah, 0x0e
-    mov al, 'M'
-    int 0x10
-
-    ; 4. Detección de Video
+    ; 4. Obtener Información de Video (VBE)
     mov ax, 0x4f01
     mov cx, 0x4118 ; 1024x768x32
     mov di, 0x7000 ; ModeInfoBlock
     int 0x10
 
-    ; 4. Cargar el Kernel
-    ; Buffer Seguro: 0x4000:0x0010 (Físico 0x40010). NO está en frontera de 64KB.
+    ; 5. Cargar Superbloque
+    ; Usamos Buffer 0x2000:0x0000 (0x20000) que es MUY seguro
 
-    ; Intentamos LBA 128 (HDD) o LBA 32 (ISO 2048-bytes)
+    ; Intentamos LBA 128 (HDD)
     mov dword [dap_lba], 128
     mov dword [dap_lba + 4], 0
-.try_read_sb:
-    ; Reset DAP con alineación estricta a 0x0000 para VirtualBox SATA
-    mov byte [dap], 0x10
-    mov byte [dap + 1], 0
-    mov word [dap + 2], 1      ; count
-    mov word [dap + 4], 0x0000 ; offset 0 bytes
-    mov word [dap + 6], 0x5000 ; segment (Buffer 0x50000)
+    call read_one_sector
+    jnc .check_magic
 
-    mov cx, 5
-.retry_sb:
-    push cx
-    mov si, dap
-    mov dl, [boot_drive]
-    mov ah, 0x42
-    int 0x13
-    pop cx
-    jnc .sb_read_ok
-
-    ; Reset disco en cada fallo
-    push ax
-    xor ax, ax
-    int 0x13
-    pop ax
-    loop .retry_sb
-
-    ; Si falló 128, probamos 32
-    cmp dword [dap_lba], 32
-    je disk_error_s2
+    ; Si falló, intentamos LBA 32 (ISO)
     mov dword [dap_lba], 32
-    jmp .try_read_sb
+    mov dword [dap_lba + 4], 0
+    call read_one_sector
+    jc disk_error_s2
 
-.sb_read_ok:
-    ; Verificar Magic
-    mov ax, 0x5000
+.check_magic:
+    ; Verificar Magic en 0x2000:0x0000
+    mov ax, 0x2000
     mov es, ax
     xor si, si
-    cmp dword [es:si], 0xCA121E1 ; Magic en offset 0x00
+    cmp dword [es:si], 0xCA121E1
     je .found_sb
 
+    ; Si el magic no está en 128, probar 32 (si no se probó ya)
     cmp dword [dap_lba], 32
     je disk_error_s2
     mov dword [dap_lba], 32
-    jmp .try_read_sb
+    call read_one_sector
+    jc disk_error_s2
+    cmp dword [es:si], 0xCA121E1
+    jne disk_error_s2
 
 .found_sb:
     mov dword [sector_factor], 1
@@ -153,179 +130,184 @@ stage2_start:
     mov dword [sector_factor], 4
 
 .read_inodes:
+    ; Leer Tabla de Inodos (LBA 132 logical)
     mov eax, 132
     xor edx, edx
     div dword [sector_factor]
     mov [dap_lba], eax
-    mov dword [dap_lba + 4], 0
 
-    ; 16KB = 8 sectores de 2048 o 32 de 512
+    ; Leer 16KB = 8 sectores ISO o 32 sectores HDD
+    ; Pero los leeremos de a uno para máxima compatibilidad
+    mov edi, 0x30000 ; Destino final de inodos en memoria física
+
     mov eax, 32
     xor edx, edx
     div dword [sector_factor]
-    mov [dap + 2], ax
-    mov word [dap + 4], 0x0000 ; offset 0
-    mov word [dap + 6], 0x5100 ; segment (Buffer 0x51000)
+    mov ecx, eax ; ecx = num sectores físicos
+.inode_loop:
+    push ecx
+    call read_one_sector
+    jc disk_error_s2
 
-    mov cx, 3
-.retry_inodes:
-    push cx
-    mov si, dap
-    mov dl, [boot_drive]
-    mov ah, 0x42
-    int 0x13
-    pop cx
-    jnc .inodes_ok
-    loop .retry_inodes
-    jmp disk_error_s2
+    ; Copiar sector de 0x20000 a EDI (usando modo protegido temporal)
+    call copy_to_high_mem
 
-.inodes_ok:
-    push ds
-    push es
-    mov ax, 0x5100
-    mov ds, ax ; DS = Segmento del buffer (0x5100:0x0000)
-    xor ax, ax
-    mov es, ax ; ES = Segmento del código (0x0000:kernel_name)
-    xor si, si ; Offset 0x00
+    ; Siguiente sector
+    inc dword [dap_lba]
+    mov eax, [sector_factor]
+    shl eax, 9 ; bytes per sector
+    add edi, eax
+    pop ecx
+    loop .inode_loop
+
+    ; Buscar Kernel
+    ; Para buscar, usamos el segmento 0x3000 (0x30000)
+    mov ax, 0x3000
+    mov ds, ax
+    xor si, si
     mov cx, 128
 .search_loop:
     push cx
     push si
-    mov di, kernel_name
+    mov di, kernel_name_str
     mov cx, 6
+    ; kernel_name_str está en seg 0, necesitamos ES=0
+    push es
+    xor ax, ax
+    mov es, ax
     repe cmpsb
+    pop es
     je .match
     pop si
     pop cx
-    add si, 80 ; carleyfs_inode_t = 80 bytes
+    add si, 80
     loop .search_loop
-    pop es
-    pop ds
     jmp kernel_not_found_err
 
 .match:
     pop si
     pop cx
-    jmp .found_kernel
-
-.found_kernel:
     mov eax, [si + 64] ; size
     mov ebx, [si + 68] ; start sector
-    pop es
-    pop ds
     xor ax, ax
     mov ds, ax
-
-    mov [kernel_sectors_left_bytes], eax
+    mov [kernel_size], eax
     mov [kernel_lba_current], ebx
+
+    ; Cargar Kernel a 0x100000
     mov edi, 0x100000
 
-.load_loop:
-    xor ax, ax
-    mov ds, ax ; Asegurar DS=0 para acceder al DAP
+.load_kernel_loop:
     mov eax, [kernel_lba_current]
     xor edx, edx
     div dword [sector_factor]
     mov [dap_lba], eax
-    mov dword [dap_lba + 4], 0
 
-    ; Leer de a 1 sector físico
-    mov word [dap + 2], 1
-    mov word [dap + 4], 0x0000
-    mov word [dap + 6], 0x2000 ; Buffer 0x20000 (Seguro y alineado)
-
-    mov si, dap
-    mov dl, [boot_drive]
-    mov ah, 0x42
-    int 0x13
+    call read_one_sector
     jc disk_error_s2
 
-    ; Entrar en Modo Protegido de 32 bits solo para copiar
-    cli
-    lgdt [gdt_ptr]
-    mov eax, cr0
-    or al, 1
-    mov cr0, eax
-    jmp 0x08:.pm_copy
+    ; Copiar a memoria alta usando modo protegido temporal
+    call copy_to_high_mem
 
-[bits 32]
-.pm_copy:
-    mov bx, 0x10
-    mov ds, bx
-    mov es, bx
-
-    ; Bytes a copiar = sector_factor * 512
-    mov eax, [0x7E00 + (sector_factor - stage2_start)]
-    shl eax, 7 ; dwords
-    mov ecx, eax
-    mov esi, 0x20000
-.copy_pm:
-    mov eax, [esi]
-    mov [edi], eax
-    add esi, 4
-    add edi, 4
-    loop .copy_pm
-
-    ; Volver a Modo Real
-    mov eax, cr0
-    and al, 0xFE
-    mov cr0, eax
-    jmp 0x00:.real_back_near
-.real_back_near:
-    ; Salto lejano para recargar CS
-    db 0xEA
-    dw .real_back
-    dw 0x0000
-
-[bits 16]
-.real_back:
-    xor ax, ax
-    mov ds, ax
-    mov es, ax
-    mov ss, ax
-    sti
-
-    ; Actualizar contadores
     mov eax, [sector_factor]
     add [kernel_lba_current], eax
-    shl eax, 9 ; bytes
+    shl eax, 9
 
-    cmp [kernel_sectors_left_bytes], eax
-    jbe .kernel_ok
-    sub [kernel_sectors_left_bytes], eax
-    jmp .load_loop
+    cmp [kernel_size], eax
+    jbe .kernel_done
+    sub [kernel_size], eax
+    add edi, eax
+    jmp .load_kernel_loop
 
-.kernel_ok:
-    ; Trace: 'K'
-    mov ah, 0x0e
-    mov al, 'K'
-    int 0x10
-
-    ; 5. Activar Modo Gráfico
+.kernel_done:
+    ; 6. Modo Gráfico
     mov ax, 0x4f02
-    mov bx, 0x4118
+    mov bx, 0x4118 ; 1024x768x32
     int 0x10
 
-    ; 6. Salto a Modo Protegido
+    ; 7. Salto Final a Modo Protegido -> Largo
+    cli
     lgdt [gdt_ptr]
     mov eax, cr0
     or al, 1
     mov cr0, eax
     jmp 0x08:pm_start
 
-disk_error_s2:
-    mov si, msg_disk_err
-    call print_string
-    mov al, ah
-    call print_hex
-    jmp hang_forever
+; --- FUNCIONES DE APOYO ---
 
-kernel_not_found_err:
-    mov si, msg_kernel_err
-    call print_string
-hang_forever:
-    hlt
-    jmp hang_forever
+read_one_sector:
+    ; Lee el LBA en [dap_lba] al buffer 0x2000:0x0000
+    pusha
+    mov byte [dap_size], 0x10
+    mov byte [dap_res], 0
+    mov word [dap_count], 1
+    mov word [dap_off], 0x0000
+    mov word [dap_seg], 0x2000
+    ; El LBA ya debe estar en [dap_lba]
+
+    mov cx, 5
+.retry:
+    push cx
+    mov ah, 0x42
+    mov dl, [boot_drive]
+    mov si, dap_size
+    int 0x13
+    pop cx
+    jnc .ok
+
+    ; Reset disco en error
+    xor ax, ax
+    mov dl, [boot_drive]
+    int 0x13
+    loop .retry
+    popa
+    stc
+    ret
+.ok:
+    popa
+    clc
+    ret
+
+copy_to_high_mem:
+    ; Copia del buffer 0x20000 a EDI
+    pusha
+    lgdt [gdt_ptr]
+    mov eax, cr0
+    or al, 1
+    mov cr0, eax
+    jmp 0x08:.pm
+[bits 32]
+.pm:
+    mov ax, 0x10
+    mov ds, ax
+    mov es, ax
+
+    mov esi, 0x20000
+    mov ecx, 128 ; default 512 bytes / 4
+    mov eax, [0x7E00 + (sector_factor - stage2_start)]
+    cmp eax, 4
+    jne .do_copy
+    mov ecx, 512 ; 2048 bytes / 4
+.do_copy:
+    rep movsd
+
+    mov eax, cr0
+    and al, 0xFE
+    mov cr0, eax
+    jmp 0x00:.real
+[bits 16]
+.real:
+    db 0xEA
+    dw .done
+    dw 0x0000
+.done:
+    xor ax, ax
+    mov ds, ax
+    mov es, ax
+    mov ss, ax
+    sti
+    popa
+    ret
 
 print_string:
     mov ah, 0x0e
@@ -358,11 +340,50 @@ print_hex:
     popa
     ret
 
-kernel_name db "kernel", 0
-msg_welcome db "CARLEY BOOTLOADER v6", 13, 10, 0
+disk_error_s2:
+    mov si, msg_disk_err
+    call print_string
+    mov al, ah
+    call print_hex
+    jmp hang_forever
+
+kernel_not_found_err:
+    mov si, msg_kernel_err
+    call print_string
+hang_forever:
+    hlt
+    jmp hang_forever
+
+; --- DATOS ---
+msg_welcome db "CARLEY BOOTLOADER v7", 13, 10, 0
 msg_disk_err db "ERR: DISK ", 0
 msg_kernel_err db "ERR: KERNEL NOT FOUND", 0
 msg_no_lba db "ERR: NO LBA SUPPORT", 0
+kernel_name_str db "kernel", 0
+
+boot_drive db 0
+sector_factor dd 1
+mem_count_extended dd 0
+rsdp_addr_low dd 0
+kernel_size dd 0
+kernel_lba_current dd 0
+
+align 16
+dap_size db 0x10
+dap_res  db 0
+dap_count dw 1
+dap_off  dw 0
+dap_seg  dw 0x2000
+dap_lba  dq 0
+
+gdt_start:
+    dq 0
+    dq 0x00CF9A000000FFFF ; Code
+    dq 0x00CF92000000FFFF ; Data
+gdt_end:
+gdt_ptr:
+    dw gdt_end - gdt_start - 1
+    dd gdt_start
 
 [bits 32]
 pm_start:
@@ -372,6 +393,7 @@ pm_start:
     mov ss, ax
     mov esp, 0x90000
 
+    ; Paginación para Modo Largo
     mov edi, 0x20000
     mov cr3, edi
     xor eax, eax
@@ -416,6 +438,7 @@ long_mode_start:
     mov ss, ax
     mov rsp, 0x9FFF0
 
+    ; Pasar info al kernel
     mov eax, [0x7000 + 40]
     mov [0x6000], rax
     mov dword [0x6008], 1024
@@ -430,28 +453,6 @@ long_mode_start:
     mov rax, 0xFFFF800000100000
     call rax
     hlt
-
-mem_count_extended dd 0
-rsdp_addr_low dd 0
-sector_factor dd 1
-boot_drive db 0
-kernel_sectors_left_bytes dd 0
-kernel_lba_current dd 0
-
-align 16
-dap: times 16 db 0
-dap_lba equ dap + 8
-
-gdt_start:
-    dq 0
-    dq 0x00CF9A000000FFFF
-    dq 0x00CF92000000FFFF
-    dq 0x00009A000000FFFF
-    dq 0x000092000000FFFF
-gdt_end:
-gdt_ptr:
-    dw gdt_end - gdt_start - 1
-    dd gdt_start
 
 gdt_start_long:
     dq 0
