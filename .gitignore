@@ -2,8 +2,8 @@
 *.o
 *.elf
 *.bin
-*.iso
-*.img
+# *.iso
+# *.img
 iso_root/
 
 # Librerias compartidas y estaticas
