@@ -38,6 +38,32 @@ stage2_start:
     or al, 2
     out 0x92, al
 
+    ; 3.1 Entrar en Unreal Mode (Cargar FS con límite de 4GB)
+    cli
+    lgdt [gdt_ptr]
+    mov eax, cr0
+    or al, 1
+    mov cr0, eax
+    jmp 0x08:.pm_temp
+[bits 32]
+.pm_temp:
+    mov ax, 0x10 ; Selector de datos (límite 4GB)
+    mov fs, ax
+    mov gs, ax
+    mov eax, cr0
+    and al, 0xFE
+    mov cr0, eax
+    ; Salto lejano manual para volver a 16 bits limpio
+    db 0xEA
+    dw .real_temp
+    dw 0x0000
+[bits 16]
+.real_temp:
+    xor ax, ax
+    mov ds, ax
+    mov es, ax
+    sti
+
     ; Detectar Memoria E820
     mov di, 0x9000
     xor ebx, ebx
@@ -92,7 +118,7 @@ stage2_start:
     int 0x10
 
     ; 5. Cargar Superbloque
-    ; Usamos Buffer 0x2000:0x0000 (0x20000) que es MUY seguro
+    ; Usamos Buffer 0x0000:0x1000 (0x1000) que es extremadamente seguro y alineado
 
     ; Intentamos LBA 128 (HDD)
     mov dword [dap_lba], 128
@@ -107,10 +133,10 @@ stage2_start:
     jc disk_error_s2
 
 .check_magic:
-    ; Verificar Magic en 0x2000:0x0000
-    mov ax, 0x2000
+    ; Verificar Magic en 0x0000:0x1000
+    xor ax, ax
     mov es, ax
-    xor si, si
+    mov si, 0x1000
     cmp dword [es:si], 0xCA121E1
     je .found_sb
 
@@ -120,6 +146,7 @@ stage2_start:
     mov dword [dap_lba], 32
     call read_one_sector
     jc disk_error_s2
+    mov si, 0x1000
     cmp dword [es:si], 0xCA121E1
     jne disk_error_s2
 
@@ -149,7 +176,7 @@ stage2_start:
     call read_one_sector
     jc disk_error_s2
 
-    ; Copiar sector de 0x20000 a EDI (usando modo protegido temporal)
+    ; Copiar sector de 0x1000 a EDI (usando modo protegido temporal)
     call copy_to_high_mem
 
     ; Siguiente sector
@@ -236,13 +263,13 @@ stage2_start:
 ; --- FUNCIONES DE APOYO ---
 
 read_one_sector:
-    ; Lee el LBA en [dap_lba] al buffer 0x2000:0x0000
+    ; Lee el LBA en [dap_lba] al buffer 0x0000:0x1000
     pusha
     mov byte [dap_size], 0x10
     mov byte [dap_res], 0
     mov word [dap_count], 1
-    mov word [dap_off], 0x0000
-    mov word [dap_seg], 0x2000
+    mov word [dap_off], 0x1000
+    mov word [dap_seg], 0x0000
     ; El LBA ya debe estar en [dap_lba]
 
     mov cx, 5
@@ -264,48 +291,35 @@ read_one_sector:
     stc
     ret
 .ok:
+    ; Visual feedback
+    mov ah, 0x0e
+    mov al, '.'
+    int 0x10
     popa
     clc
     ret
 
 copy_to_high_mem:
-    ; Copia del buffer 0x20000 a EDI
+    ; Copia del buffer físico 0x1000 a EDI físico usando Unreal Mode (FS)
     pusha
-    lgdt [gdt_ptr]
-    mov eax, cr0
-    or al, 1
-    mov cr0, eax
-    jmp 0x08:.pm
-[bits 32]
-.pm:
-    mov ax, 0x10
-    mov ds, ax
-    mov es, ax
-
-    mov esi, 0x20000
-    mov ecx, 128 ; default 512 bytes / 4
-    mov eax, [0x7E00 + (sector_factor - stage2_start)]
-    cmp eax, 4
-    jne .do_copy
-    mov ecx, 512 ; 2048 bytes / 4
-.do_copy:
-    rep movsd
-
-    mov eax, cr0
-    and al, 0xFE
-    mov cr0, eax
-    jmp 0x00:.real
-[bits 16]
-.real:
-    db 0xEA
-    dw .done
-    dw 0x0000
-.done:
+    push ds
     xor ax, ax
     mov ds, ax
-    mov es, ax
-    mov ss, ax
-    sti
+
+    mov esi, 0x1000
+    mov eax, [sector_factor]
+    shl eax, 9 ; bytes a copiar
+    mov ecx, eax
+    shr ecx, 2 ; dwords a copiar
+
+.copy_loop:
+    a32 lodsd
+    ; Usamos prefijo FS para ignorar el límite de 64KB de ES
+    db 0x64, 0x67, 0x89, 0x07 ; mov [fs:edi], eax (en 32-bit offsets)
+    a32 add edi, 4
+    loop .copy_loop
+
+    pop ds
     popa
     ret
 
@@ -372,8 +386,8 @@ align 16
 dap_size db 0x10
 dap_res  db 0
 dap_count dw 1
-dap_off  dw 0
-dap_seg  dw 0x2000
+dap_off  dw 0x1000
+dap_seg  dw 0x0000
 dap_lba  dq 0
 
 gdt_start:
