@@ -40,19 +40,28 @@ static void hlt(void) { for (;;) { __asm__("hlt"); } }
 void kmain(boot_info_t *boot_info);
 void draw_splash(void);
 
+extern void serial_init();
+extern void write_serial_string(const char* s);
+
 void kmain(boot_info_t *boot_info) {
+    serial_init();
+    write_serial_string("Kernel started!\n");
     cpu_enable_features();
 
     // Inicializar video lo antes posible para ver si arranca
     // Usamos el offset HHDM para acceder al framebuffer
     video_init_vbe(boot_info->framebuffer_address + HHDM_OFFSET, boot_info->screen_width, boot_info->screen_height);
     video_clear(0x0000FF); // Pantalla AZUL para depuración: el kernel ha empezado
+    write_serial_string("Video initialized.\n");
 
     // Reemplazaremos pmm_init() para usar boot_info->memory_map_address
     // El mapa de memoria está en 0x9000, accesible via HHDM o identity
     pmm_init_custom(boot_info->memory_map_address + HHDM_OFFSET, boot_info->memory_map_count);
+    write_serial_string("PMM initialized.\n");
     vmm_init(boot_info);
+    write_serial_string("VMM initialized.\n");
     kheap_init();
+    write_serial_string("Kheap initialized.\n");
 
     cpu_init_local(0);
     gdt_init();

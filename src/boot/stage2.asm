@@ -34,51 +34,66 @@ stage2_start:
     int 0x13
 
     ; 3. Hardware init: A20
-    in al, 0x92
-    or al, 2
-    out 0x92, al
+    call enable_a20
+    mov al, 'A'
+    call print_char
 
-    ; 3.1 Entrar en Unreal Mode (Cargar FS con límite de 4GB)
+    ; 3.1 Entrar en Unreal Mode (Cargar FS/GS con límite de 4GB)
     cli
+    push ds
     lgdt [gdt_ptr]
     mov eax, cr0
     or al, 1
     mov cr0, eax
-    jmp 0x08:.pm_temp
-[bits 32]
+
+    ; Salto lejano a un segmento de 16 bits en PM para resetear el descriptor cache
+    jmp 0x18:.pm_temp
+
 .pm_temp:
     mov ax, 0x10 ; Selector de datos (límite 4GB)
+    mov ds, ax
+    mov es, ax
     mov fs, ax
     mov gs, ax
+    mov ss, ax
+
     mov eax, cr0
     and al, 0xFE
     mov cr0, eax
-    ; Salto lejano manual para volver a 16 bits limpio
-    db 0xEA
-    dw .real_temp
-    dw 0x0000
-[bits 16]
+
+    ; Salto lejano para volver a modo real completamente
+    jmp 0x0000:.real_temp
+
 .real_temp:
+    pop ds
     xor ax, ax
-    mov ds, ax
     mov es, ax
+    mov ss, ax
+    mov sp, 0x7C00
     sti
+
+    mov al, 'U'
+    call print_char
 
     ; Detectar Memoria E820
     mov di, 0x9000
     xor ebx, ebx
-    mov edx, 0x534D4150
     mov dword [mem_count_extended], 0
 .do_e820:
     mov eax, 0xe820
     mov ecx, 24
+    mov edx, 0x534D4150
     int 0x15
     jc .e820_done
+    cmp eax, 0x534D4150
+    jne .e820_done
     add di, 24
     inc dword [mem_count_extended]
     test ebx, ebx
     jne .do_e820
 .e820_done:
+    mov al, 'M'
+    call print_char
 
     ; Buscar RSDP (ACPI)
     mov dword [rsdp_addr_low], 0
@@ -110,37 +125,35 @@ stage2_start:
 .rsdp_done:
     xor ax, ax
     mov es, ax
+    mov al, 'R'
+    call print_char
 
     ; 4. Obtener Información de Video (VBE)
     mov ax, 0x4f01
     mov cx, 0x4118 ; 1024x768x32
     mov di, 0x7000 ; ModeInfoBlock
     int 0x10
+    mov al, 'G'
+    call print_char
 
     ; 5. Cargar Superbloque
-    ; Usamos Buffer 0x0000:0x1000 (0x1000) que es extremadamente seguro y alineado
-
-    ; Intentamos LBA 128 (HDD)
     mov dword [dap_lba], 128
     mov dword [dap_lba + 4], 0
     call read_one_sector
-    jnc .check_magic
+    jnc .check_magic_sb
 
-    ; Si falló, intentamos LBA 32 (ISO)
     mov dword [dap_lba], 32
     mov dword [dap_lba + 4], 0
     call read_one_sector
     jc disk_error_s2
 
-.check_magic:
-    ; Verificar Magic en 0x0000:0x1000
+.check_magic_sb:
     xor ax, ax
     mov es, ax
     mov si, 0x1000
     cmp dword [es:si], 0xCA121E1
     je .found_sb
 
-    ; Si el magic no está en 128, probar 32 (si no se probó ya)
     cmp dword [dap_lba], 32
     je disk_error_s2
     mov dword [dap_lba], 32
@@ -157,38 +170,29 @@ stage2_start:
     mov dword [sector_factor], 4
 
 .read_inodes:
-    ; Leer Tabla de Inodos (LBA 132 logical)
     mov eax, 132
     xor edx, edx
     div dword [sector_factor]
     mov [dap_lba], eax
 
-    ; Leer 16KB = 8 sectores ISO o 32 sectores HDD
-    ; Pero los leeremos de a uno para máxima compatibilidad
-    mov edi, 0x30000 ; Destino final de inodos en memoria física
-
+    mov edi, 0x30000
     mov eax, 32
     xor edx, edx
     div dword [sector_factor]
-    mov ecx, eax ; ecx = num sectores físicos
+    mov ecx, eax
 .inode_loop:
     push ecx
     call read_one_sector
     jc disk_error_s2
-
-    ; Copiar sector de 0x1000 a EDI (usando modo protegido temporal)
     call copy_to_high_mem
-
-    ; Siguiente sector
     inc dword [dap_lba]
     mov eax, [sector_factor]
-    shl eax, 9 ; bytes per sector
+    shl eax, 9
     add edi, eax
     pop ecx
     loop .inode_loop
 
     ; Buscar Kernel
-    ; Para buscar, usamos el segmento 0x3000 (0x30000)
     mov ax, 0x3000
     mov ds, ax
     xor si, si
@@ -198,7 +202,6 @@ stage2_start:
     push si
     mov di, kernel_name_str
     mov cx, 6
-    ; kernel_name_str está en seg 0, necesitamos ES=0
     push es
     xor ax, ax
     mov es, ax
@@ -232,8 +235,6 @@ stage2_start:
 
     call read_one_sector
     jc disk_error_s2
-
-    ; Copiar a memoria alta usando modo protegido temporal
     call copy_to_high_mem
 
     mov eax, [sector_factor]
@@ -241,18 +242,32 @@ stage2_start:
     shl eax, 9
 
     cmp [kernel_size], eax
-    jbe .kernel_done
+    jbe .kernel_loaded
     sub [kernel_size], eax
     add edi, eax
     jmp .load_kernel_loop
 
-.kernel_done:
+.kernel_loaded:
+    mov al, 'K'
+    call print_char
+
+    ; Verificar Magic del Kernel
+    mov eax, [fs:0x100005]
+    cmp eax, 0xC0DEB007
+    je .magic_ok
+    mov al, 'M'
+    call print_char
+    jmp hang_forever
+.magic_ok:
+    mov al, '!'
+    call print_char
+
     ; 6. Modo Gráfico
     mov ax, 0x4f02
     mov bx, 0x4118 ; 1024x768x32
     int 0x10
 
-    ; 7. Salto Final a Modo Protegido -> Largo
+    ; 7. Salto Final a Modo Protegido
     cli
     lgdt [gdt_ptr]
     mov eax, cr0
@@ -263,15 +278,12 @@ stage2_start:
 ; --- FUNCIONES DE APOYO ---
 
 read_one_sector:
-    ; Lee el LBA en [dap_lba] al buffer 0x0000:0x1000
     pusha
     mov byte [dap_size], 0x10
     mov byte [dap_res], 0
     mov word [dap_count], 1
     mov word [dap_off], 0x1000
     mov word [dap_seg], 0x0000
-    ; El LBA ya debe estar en [dap_lba]
-
     mov cx, 5
 .retry:
     push cx
@@ -281,8 +293,6 @@ read_one_sector:
     int 0x13
     pop cx
     jnc .ok
-
-    ; Reset disco en error
     xor ax, ax
     mov dl, [boot_drive]
     int 0x13
@@ -291,7 +301,6 @@ read_one_sector:
     stc
     ret
 .ok:
-    ; Visual feedback
     mov ah, 0x0e
     mov al, '.'
     int 0x10
@@ -300,25 +309,20 @@ read_one_sector:
     ret
 
 copy_to_high_mem:
-    ; Copia del buffer físico 0x1000 a EDI físico usando Unreal Mode (FS)
     pusha
     push ds
     xor ax, ax
     mov ds, ax
-
     mov esi, 0x1000
     mov eax, [sector_factor]
-    shl eax, 9 ; bytes a copiar
+    shl eax, 9
     mov ecx, eax
-    shr ecx, 2 ; dwords a copiar
-
+    shr ecx, 2
 .copy_loop:
     a32 lodsd
-    ; Usamos prefijo FS para ignorar el límite de 64KB de ES
-    db 0x64, 0x67, 0x89, 0x07 ; mov [fs:edi], eax (en 32-bit offsets)
+    db 0x64, 0x67, 0x89, 0x07 ; mov [fs:edi], eax
     a32 add edi, 4
     loop .copy_loop
-
     pop ds
     popa
     ret
@@ -354,6 +358,26 @@ print_hex:
     popa
     ret
 
+print_char:
+    mov ah, 0x0e
+    int 0x10
+    ; Serial output
+    push dx
+    mov dx, 0x3f8
+    out dx, al
+    pop dx
+    ret
+
+enable_a20:
+    mov ax, 0x2401
+    int 0x15
+    jnc .done
+    in al, 0x92
+    or al, 2
+    out 0x92, al
+.done:
+    ret
+
 disk_error_s2:
     mov si, msg_disk_err
     call print_string
@@ -369,7 +393,7 @@ hang_forever:
     jmp hang_forever
 
 ; --- DATOS ---
-msg_welcome db "CARLEY BOOTLOADER v7", 13, 10, 0
+msg_welcome db "CARLEY BOOTLOADER v9", 13, 10, 0
 msg_disk_err db "ERR: DISK ", 0
 msg_kernel_err db "ERR: KERNEL NOT FOUND", 0
 msg_no_lba db "ERR: NO LBA SUPPORT", 0
@@ -392,8 +416,9 @@ dap_lba  dq 0
 
 gdt_start:
     dq 0
-    dq 0x00CF9A000000FFFF ; Code
-    dq 0x00CF92000000FFFF ; Data
+    dq 0x00CF9A000000FFFF ; 0x08: Code 32-bit
+    dq 0x00CF92000000FFFF ; 0x10: Data 32-bit (4GB)
+    dq 0x00009A000000FFFF ; 0x18: Code 16-bit
 gdt_end:
 gdt_ptr:
     dw gdt_end - gdt_start - 1
@@ -407,7 +432,6 @@ pm_start:
     mov ss, ax
     mov esp, 0x90000
 
-    ; Paginación para Modo Largo
     mov edi, 0x20000
     mov cr3, edi
     xor eax, eax
@@ -452,7 +476,6 @@ long_mode_start:
     mov ss, ax
     mov rsp, 0x9FFF0
 
-    ; Pasar info al kernel
     mov eax, [0x7000 + 40]
     mov [0x6000], rax
     mov dword [0x6008], 1024

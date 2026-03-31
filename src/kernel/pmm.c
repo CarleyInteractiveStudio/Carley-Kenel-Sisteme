@@ -61,8 +61,9 @@ void pmm_init_custom(uint64_t map_addr, uint32_t count) {
         if (map[i].type == 1) {
             for (uint64_t j = 0; j < map[i].length; j += PAGE_SIZE) {
                 uint64_t addr = map[i].base + j;
-                // No marcar como libre si esta por debajo de 6MB (Kernel, Bootloader, Stack, Bitmap)
-                if (addr >= 0x600000) {
+                // No marcar como libre si esta por debajo de 16MB (Kernel, Bootloader, Stack, Bitmap)
+                // Usamos 16MB para evitar colisionar con el initrd o el bitmap/ref_counts
+                if (addr >= 0x1000000) {
                     bitmap_clear(addr / PAGE_SIZE);
                     free_pages++;
                 }
