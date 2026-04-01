@@ -28,7 +28,7 @@ stage2_start:
     jmp hang_forever
 .lba_ok:
 
-    ; Reset disco
+    ; Reset disco (VirtualBox BIOS mode fix)
     xor ax, ax
     mov dl, [boot_drive]
     int 0x13
@@ -39,6 +39,7 @@ stage2_start:
     call print_char
 
     ; 3.1 Entrar en Unreal Mode (Cargar FS/GS con límite de 4GB)
+    ; Versión reforzada para estabilidad en VirtualBox
     cli
     push ds
     lgdt [gdt_ptr]
@@ -137,6 +138,7 @@ stage2_start:
     call print_char
 
     ; 5. Cargar Superbloque
+    ; Buscamos en LBA 128 (HDD) y LBA 32 (CD-ROM)
     mov dword [dap_lba], 128
     mov dword [dap_lba + 4], 0
     call read_one_sector
@@ -251,11 +253,14 @@ stage2_start:
     mov al, 'K'
     call print_char
 
-    ; Verificar Magic del Kernel
-    mov eax, [fs:0x100005]
+    ; Verificar Magic del Kernel en el offset correcto
+    ; (Haciendo uso de FS para acceder arriba de 1MB en modo real/unreal)
+    ; Usamos EBX para evitar el warning de desbordamiento en 16-bit
+    mov ebx, 0x100005
+    db 0x64, 0x67, 0x8B, 0x03 ; mov eax, [fs:ebx] (con prefijos FS y addr32)
     cmp eax, 0xC0DEB007
     je .magic_ok
-    mov al, 'M'
+    mov al, 'X' ; Fallo de Magic
     call print_char
     jmp hang_forever
 .magic_ok:
@@ -282,7 +287,7 @@ read_one_sector:
     mov byte [dap_size], 0x10
     mov byte [dap_res], 0
     mov word [dap_count], 1
-    mov word [dap_off], 0x1000
+    mov word [dap_off], 0x1000 ; Bounce buffer at 0x1000
     mov word [dap_seg], 0x0000
     mov cx, 5
 .retry:
@@ -301,9 +306,6 @@ read_one_sector:
     stc
     ret
 .ok:
-    mov ah, 0x0e
-    mov al, '.'
-    int 0x10
     popa
     clc
     ret
@@ -361,7 +363,7 @@ print_hex:
 print_char:
     mov ah, 0x0e
     int 0x10
-    ; Serial output
+    ; Serial output (COM1)
     push dx
     mov dx, 0x3f8
     out dx, al
@@ -369,9 +371,11 @@ print_char:
     ret
 
 enable_a20:
+    ; Intento 1: BIOS
     mov ax, 0x2401
     int 0x15
     jnc .done
+    ; Intento 2: Teclado (Fast A20)
     in al, 0x92
     or al, 2
     out 0x92, al
@@ -393,7 +397,7 @@ hang_forever:
     jmp hang_forever
 
 ; --- DATOS ---
-msg_welcome db "CARLEY BOOTLOADER v9", 13, 10, 0
+msg_welcome db "CARLEY BOOTLOADER v9.1", 13, 10, 0
 msg_disk_err db "ERR: DISK ", 0
 msg_kernel_err db "ERR: KERNEL NOT FOUND", 0
 msg_no_lba db "ERR: NO LBA SUPPORT", 0

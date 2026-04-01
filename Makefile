@@ -61,12 +61,9 @@ userland:
 
 # Target para generar una ISO booteable (BIOS/Legacy)
 iso: carley-os.img bootloader
-	@echo "Generando carley-os.iso (Modo Híbrido)..."
+	@echo "Generando carley-os.iso..."
 	mkdir -p iso_root
 	cp carley-os.img iso_root/
-	# Usamos xorriso para crear una ISO.
-	# Hemos eliminado -boot-info-table porque la imagen es muy grande (40MB)
-	# y no es necesaria para nuestro cargador personalizado.
 	xorriso -as mkisofs \
 		-quiet \
 		-V "CARLEY_OS" \
@@ -75,8 +72,6 @@ iso: carley-os.img bootloader
 		-boot-load-size 64 \
 		-o carley-os.iso iso_root || \
 	(echo "Error: xorriso falló al crear ISO." && rm -rf iso_root && exit 1)
-	# Aplicamos isohybrid si está disponible para asegurar compatibilidad total
-	-isohybrid carley-os.iso 2>/dev/null || true
 	rm -rf iso_root
 	@echo "¡ISO generada con éxito: carley-os.iso!"
 
