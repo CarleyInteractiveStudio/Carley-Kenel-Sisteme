@@ -29,7 +29,10 @@ bootloader:
 	nasm -f bin src/boot/boot.asm -o src/boot/boot.bin
 	nasm -f bin src/boot/stage2.asm -o src/boot/stage2.bin
 	nasm -f bin src/boot/ap_trampoline.asm -o src/boot/ap_trampoline.bin
-	cat src/boot/boot.bin src/boot/stage2.bin > bootloader.bin
+	# Padding MBR (512B) to 2048B so Stage 2 starts at LBA 1 (CD-ROM)
+	dd if=/dev/zero bs=1 count=1536 of=padding.bin
+	cat src/boot/boot.bin padding.bin src/boot/stage2.bin > bootloader.bin
+	rm padding.bin
 	# Intentar compilar el cargador UEFI si gcc-mingw-w64 está disponible
 	-x86_64-w64-mingw32-gcc $(UEFI_CFLAGS) src/boot/uefi/main.c -o src/boot/uefi/main.o
 	-x86_64-w64-mingw32-gcc -nostdlib -Wl,-dll -shared -Wl,--subsystem,10 src/boot/uefi/main.o -o bootx64.efi
