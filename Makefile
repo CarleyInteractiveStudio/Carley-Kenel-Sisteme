@@ -69,8 +69,10 @@ iso: $(KERNEL) initrd.bin
 
 setup:
 	@echo "Instalando dependencias de Limine..."
-	git clone https://github.com/limine-bootloader/limine.git --branch=v7.x-binary --depth=1
-	make -C limine
+	if [ ! -d "limine" ]; then \
+		git clone https://github.com/limine-bootloader/limine.git --branch=v7.x-binary --depth=1; \
+	fi
+	$(MAKE) -C limine
 	@echo "Dependencias de Limine instaladas."
 
 clean:
