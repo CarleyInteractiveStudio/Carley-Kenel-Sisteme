@@ -62,6 +62,12 @@ static volatile struct limine_module_request module_request = {
     .revision = 0
 };
 
+__attribute__((used, section(".requests")))
+static volatile struct limine_smp_request smp_request = {
+    .id = LIMINE_SMP_REQUEST,
+    .revision = 0
+};
+
 __attribute__((used, section(".requests_start_marker")))
 static volatile LIMINE_REQUESTS_START_MARKER;
 
@@ -122,7 +128,12 @@ void _start(void) {
     acpi_init_custom(binfo.rsdp_address);
 
     apic_init();
-    smp_init();
+
+    // Arrancar otros núcleos usando Limine
+    if (smp_request.response) {
+        smp_init_limine(smp_request.response);
+        write_serial_string("SMP initialized via Limine.\n");
+    }
 
     kbd_buf_init();
     sched_init();
