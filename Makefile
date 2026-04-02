@@ -38,23 +38,30 @@ userland:
 %.o: %.s
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# Generar ISO usando Limine - Corrigiendo rutas de búsqueda del config
+# Generar ISO compatible con BIOS y UEFI
 iso: $(KERNEL) initrd.bin
-	@echo "Generando carley-os.iso con Limine (Fixing Config Path)..."
+	@echo "Generando carley-os.iso (BIOS + UEFI Support)..."
 	rm -rf iso_root
 	mkdir -p iso_root/boot/limine
+	mkdir -p iso_root/EFI/BOOT
 
-	# El Kernel y el Initrd se quedan en /boot/
+	# Kernel e Initrd
 	cp $(KERNEL) iso_root/boot/
 	cp initrd.bin iso_root/boot/
 
-	# El archivo de configuración y el sistema de Limine en la raíz Y en /boot/limine/ para máxima compatibilidad
+	# Limine Config (en raíz y en /boot/limine/)
 	cp limine.conf iso_root/
 	cp limine.conf iso_root/boot/limine/
 
+	# Archivos para BIOS
 	cp limine/limine-bios.sys iso_root/boot/limine/
 	cp limine/limine-bios-cd.bin iso_root/boot/limine/
+
+	# Archivos para UEFI
 	cp limine/limine-uefi-cd.bin iso_root/boot/limine/
+	cp limine/BOOTX64.EFI iso_root/EFI/BOOT/
+	# Tambien soportar 32-bit UEFI por si acaso
+	cp limine/BOOTIA32.EFI iso_root/EFI/BOOT/ 2>/dev/null || true
 
 	xorriso -as mkisofs \
 		-b boot/limine/limine-bios-cd.bin \
@@ -65,7 +72,7 @@ iso: $(KERNEL) initrd.bin
 
 	./limine/limine bios-install carley-os.iso
 	rm -rf iso_root
-	@echo "¡ISO generada con éxito! He puesto limine.conf en la raíz para evitar el error 'Config file not found'."
+	@echo "¡ISO generada con éxito con soporte HÍBRIDO (BIOS + UEFI)!"
 
 setup:
 	@echo "Instalando dependencias de Limine..."
