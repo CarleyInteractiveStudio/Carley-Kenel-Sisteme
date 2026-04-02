@@ -29,36 +29,87 @@
 #include "smp.h"
 #include "drivers/apic.h"
 #include "drivers/ahci.h"
+#include "limine.h"
+
+// Limine Requests
+__attribute__((used, section(".requests")))
+static volatile struct limine_framebuffer_request framebuffer_request = {
+    .id = LIMINE_FRAMEBUFFER_REQUEST,
+    .revision = 0
+};
+
+__attribute__((used, section(".requests")))
+static volatile struct limine_hhdm_request hhdm_request = {
+    .id = LIMINE_HHDM_REQUEST,
+    .revision = 0
+};
+
+__attribute__((used, section(".requests")))
+static volatile struct limine_memmap_request memmap_request = {
+    .id = LIMINE_MEMMAP_REQUEST,
+    .revision = 0
+};
+
+__attribute__((used, section(".requests")))
+static volatile struct limine_rsdp_request rsdp_request = {
+    .id = LIMINE_RSDP_REQUEST,
+    .revision = 0
+};
+
+__attribute__((used, section(".requests")))
+static volatile struct limine_module_request module_request = {
+    .id = LIMINE_MODULE_REQUEST,
+    .revision = 0
+};
+
+__attribute__((used, section(".requests_start_marker")))
+static volatile LIMINE_REQUESTS_START_MARKER;
+
+__attribute__((used, section(".requests_end_marker")))
+static volatile LIMINE_REQUESTS_END_MARKER;
 
 extern void mouse_init(void);
 
 static void hlt(void) { for (;;) { __asm__("hlt"); } }
 
-// SMP deshabilitado temporalmente para el cargador custom
-// void ap_main(...) { ... }
-
-void kmain(boot_info_t *boot_info);
+void _start(void);
 void draw_splash(void);
 
 extern void serial_init();
 extern void write_serial_string(const char* s);
 
-void kmain(boot_info_t *boot_info) {
+void _start(void) {
     serial_init();
-    write_serial_string("Kernel started!\n");
+    write_serial_string("Kernel started via Limine!\n");
     cpu_enable_features();
 
-    // Inicializar video lo antes posible para ver si arranca
-    // Usamos el offset HHDM para acceder al framebuffer
-    video_init_vbe(boot_info->framebuffer_address + HHDM_OFFSET, boot_info->screen_width, boot_info->screen_height);
-    video_clear(0x0000FF); // Pantalla AZUL para depuración: el kernel ha empezado
+    // Check Limine responses
+    if (framebuffer_request.response == NULL || hhdm_request.response == NULL || memmap_request.response == NULL) {
+        hlt();
+    }
+
+    struct limine_framebuffer *fb = framebuffer_request.response->framebuffers[0];
+    uint64_t hhdm = hhdm_request.response->offset;
+
+    // Inicializar video lo antes posible
+    video_init_vbe((uintptr_t)fb->address, fb->width, fb->height);
+    video_clear(0x0000FF); // Pantalla AZUL: el kernel ha empezado
     write_serial_string("Video initialized.\n");
 
-    // Reemplazaremos pmm_init() para usar boot_info->memory_map_address
-    // El mapa de memoria está en 0x9000, accesible via HHDM o identity
-    pmm_init_custom(boot_info->memory_map_address + HHDM_OFFSET, boot_info->memory_map_count);
+    // Reutilizamos la estructura boot_info_t internamente
+    boot_info_t binfo;
+    binfo.framebuffer_address = (uintptr_t)fb->address - hhdm; // Base física
+    binfo.screen_width = fb->width;
+    binfo.screen_height = fb->height;
+    binfo.memory_map_address = (uintptr_t)memmap_request.response->entries;
+    binfo.memory_map_count = memmap_request.response->entry_count;
+    binfo.rsdp_address = (rsdp_request.response) ? (uintptr_t)rsdp_request.response->address : 0;
+
+    // Inicializar PMM con el mapa de Limine
+    pmm_init_limine(memmap_request.response);
     write_serial_string("PMM initialized.\n");
-    vmm_init(boot_info);
+
+    vmm_init(&binfo);
     write_serial_string("VMM initialized.\n");
     kheap_init();
     write_serial_string("Kheap initialized.\n");
@@ -67,8 +118,8 @@ void kmain(boot_info_t *boot_info) {
     gdt_init();
     idt_init();
 
-    // Inicializar ACPI con la dirección pasada por el cargador
-    acpi_init_custom(boot_info->rsdp_address);
+    // Inicializar ACPI
+    acpi_init_custom(binfo.rsdp_address);
 
     apic_init();
     smp_init();
@@ -79,7 +130,13 @@ void kmain(boot_info_t *boot_info) {
     vfs_init();
     ide_init();
     ahci_init();
-    initrd_load_custom();
+
+    // Cargar initrd desde Limine
+    if (module_request.response) {
+        initrd_load_limine(module_request.response);
+        write_serial_string("Initrd loaded via Limine.\n");
+    }
+
     vfs_mount(carleyfs_init());
     vfs_mount(ramfs_init());
     audio_init();
@@ -93,7 +150,7 @@ void kmain(boot_info_t *boot_info) {
     mouse_init();
     composer_start();
 
-    // Cargar módulos desde el initrd custom
+    // Cargar módulos
     elf_load("input.elf");
     elf_load("shell_gui.elf");
 

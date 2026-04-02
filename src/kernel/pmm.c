@@ -6,6 +6,7 @@
 #include "pmm.h"
 #include "spinlock.h"
 #include "config.h"
+#include "limine.h"
 
 static uint8_t *bitmap = NULL;
 static uint64_t total_pages = 0;
@@ -29,17 +30,22 @@ static inline bool bitmap_test(uint64_t index) {
 }
 
 void pmm_init(void) {
-    // Obsoleto en el cargador Carley. Usamos pmm_init_custom.
+    // Obsoleto.
 }
 
 void pmm_init_custom(uint64_t map_addr, uint32_t count) {
-    e820_entry_t *map = (e820_entry_t *)map_addr;
-    hhdm_offset = 0; // En nuestro cargador el kernel es identity mapped (0-4GB)
+    // Obsoleto en Limine.
+    (void)map_addr; (void)count;
+}
+
+void pmm_init_limine(struct limine_memmap_response *response) {
+    hhdm_offset = HHDM_OFFSET;
 
     uint64_t highest_address = 0;
-    for (uint32_t i = 0; i < count; i++) {
-        if (map[i].type == 1) { // Type 1 = Usable
-            uint64_t top = map[i].base + map[i].length;
+    for (uint64_t i = 0; i < response->entry_count; i++) {
+        struct limine_memmap_entry *entry = response->entries[i];
+        if (entry->type == LIMINE_MEMMAP_USABLE) {
+            uint64_t top = entry->base + entry->length;
             if (top > highest_address) highest_address = top;
         }
     }
@@ -48,25 +54,35 @@ void pmm_init_custom(uint64_t map_addr, uint32_t count) {
     uint64_t bitmap_size = (total_pages / 8);
     bitmap_size = (bitmap_size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
 
-    // Buscar sitio para el bitmap. Usaremos los primeros 1MB libres despues del Kernel
-    // El kernel esta en 0x100000. Pondremos el bitmap en 0x500000 (5MB) para estar seguros.
-    bitmap = (uint8_t *)(0x500000 + HHDM_OFFSET);
-    memset(bitmap, 0xff, bitmap_size);
+    // En Limine, podemos usar memoria marcada como BOOTLOADER_RECLAIMABLE para el bitmap inicial
+    // Pero para simplificar, buscaremos un hueco usable grande.
+    for (uint64_t i = 0; i < response->entry_count; i++) {
+        struct limine_memmap_entry *entry = response->entries[i];
+        if (entry->type == LIMINE_MEMMAP_USABLE && entry->length >= bitmap_size + (total_pages * 2)) {
+            bitmap = (uint8_t *)(entry->base + hhdm_offset);
+            ref_counts = (uint16_t *)((uintptr_t)bitmap + bitmap_size);
 
-    // Reservar espacio para los contadores de referencia (2 bytes por página)
-    ref_counts = (uint16_t *)(0x600000 + HHDM_OFFSET);
+            // Marcar estas páginas como ocupadas inmediatamente
+            // (Se hará en el bucle de abajo al procesar los entries)
+            break;
+        }
+    }
+
+    memset(bitmap, 0xff, bitmap_size);
     memset(ref_counts, 0, total_pages * 2);
 
-    for (uint32_t i = 0; i < count; i++) {
-        if (map[i].type == 1) {
-            for (uint64_t j = 0; j < map[i].length; j += PAGE_SIZE) {
-                uint64_t addr = map[i].base + j;
-                // No marcar como libre si esta por debajo de 16MB (Kernel, Bootloader, Stack, Bitmap)
-                // Usamos 16MB para evitar colisionar con el initrd o el bitmap/ref_counts
-                if (addr >= 0x1000000) {
-                    bitmap_clear(addr / PAGE_SIZE);
-                    free_pages++;
-                }
+    for (uint64_t i = 0; i < response->entry_count; i++) {
+        struct limine_memmap_entry *entry = response->entries[i];
+        if (entry->type == LIMINE_MEMMAP_USABLE) {
+            for (uint64_t j = 0; j < entry->length; j += PAGE_SIZE) {
+                uint64_t addr = entry->base + j;
+                // No liberar las páginas donde acabamos de poner el bitmap/ref_counts
+                uint64_t bitmap_phys = (uintptr_t)bitmap - hhdm_offset;
+                if (addr >= bitmap_phys && addr < bitmap_phys + bitmap_size + (total_pages * 2))
+                    continue;
+
+                bitmap_clear(addr / PAGE_SIZE);
+                free_pages++;
             }
         }
     }

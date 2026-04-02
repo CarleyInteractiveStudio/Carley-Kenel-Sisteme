@@ -4,38 +4,23 @@ LD ?= ld
 
 KERNEL := kernel.elf
 
-# Eliminamos -mcmodel=kernel porque ahora el cargador es mas simple y
-# el kernel se carga en el primer 1MB (Identity mapped)
+# CFLAGS para Kernel de 64 bits con Limine
+# Importante: -mcmodel=kernel para el direccionamiento ffffffff80000000
 CFLAGS := -Wall -Wextra -std=c11 -ffreestanding -fno-stack-protector -fno-stack-check \
           -fno-lto -fno-pie -fno-pic -m64 -march=x86-64 -mno-80387 -mno-mmx -mno-sse \
-          -mno-sse2 -mno-red-zone -mcmodel=large -fcf-protection=none -Isrc/kernel -Icommon
+          -mno-sse2 -mno-red-zone -mcmodel=kernel -fcf-protection=none -Isrc/kernel -Icommon
 
-LDFLAGS := -nostdlib -static -m elf_x86_64 -z max-page-size=0x1000 -T linker.ld --oformat binary
+# LDFLAGS para generar un ELF64 real (no binario crudo)
+LDFLAGS := -nostdlib -static -m elf_x86_64 -z max-page-size=0x1000 -T linker.ld
 
-C_SOURCES := src/kernel/main.c $(filter-out src/kernel/main.c, $(shell find src/kernel -name '*.c')) $(shell find common -name '*.c')
+C_SOURCES := $(shell find src/kernel -name '*.c') $(shell find common -name '*.c')
 S_SOURCES := $(shell find src/kernel -name '*.s')
-# Explicitly place main.o first to ensure the magic signature is at the start of the binary
-OBJ := src/kernel/entry.o $(filter-out src/kernel/entry.o, $(C_SOURCES:.c=.o) $(S_SOURCES:.s=.o))
+# Excluimos entry.o ya que ahora el kernel empieza en main.c (_start)
+OBJ := $(filter-out src/kernel/entry.o, $(C_SOURCES:.c=.o) $(S_SOURCES:.s=.o))
 
-.PHONY: all clean iso userland setup bootloader
+.PHONY: all clean iso userland setup
 
-all: bootloader $(KERNEL) userland carley-os.img
-
-# UEFI Loader CFLAGS
-UEFI_CFLAGS := -ffreestanding -fshort-wchar -mno-red-zone -fno-stack-protector \
-               -target x86_64-unknown-windows -c
-
-bootloader:
-	nasm -f bin src/boot/boot.asm -o src/boot/boot.bin
-	nasm -f bin src/boot/stage2.asm -o src/boot/stage2.bin
-	nasm -f bin src/boot/ap_trampoline.asm -o src/boot/ap_trampoline.bin
-	# Padding MBR (512B) to 2048B so Stage 2 starts at LBA 1 (CD-ROM)
-	dd if=/dev/zero bs=1 count=1536 of=padding.bin
-	cat src/boot/boot.bin padding.bin src/boot/stage2.bin > bootloader.bin
-	rm padding.bin
-	# Intentar compilar el cargador UEFI si gcc-mingw-w64 está disponible
-	-x86_64-w64-mingw32-gcc $(UEFI_CFLAGS) src/boot/uefi/main.c -o src/boot/uefi/main.o
-	-x86_64-w64-mingw32-gcc -nostdlib -Wl,-dll -shared -Wl,--subsystem,10 src/boot/uefi/main.o -o bootx64.efi
+all: $(KERNEL) userland initrd.bin
 
 $(KERNEL): $(OBJ)
 	$(LD) $(LDFLAGS) $(OBJ) -o $@
@@ -43,15 +28,8 @@ $(KERNEL): $(OBJ)
 meta/pack_initrd: meta/pack_initrd.c
 	gcc $< -o $@
 
-meta/format_carleyfs: meta/format_carleyfs.cpp
-	g++ $< -o $@
-
 initrd.bin: meta/pack_initrd userland
 	./meta/pack_initrd $@ src/user/*.elf src/user/libc.so
-
-carley-os.img: bootloader $(KERNEL) initrd.bin meta/format_carleyfs
-	# Generar imagen de disco con CarleyFS (Superbloque, Inodos y archivos)
-	./meta/format_carleyfs $@ bootloader.bin $(KERNEL) initrd.bin src/boot/ap_trampoline.bin
 
 userland:
 	$(MAKE) -C src/user
@@ -62,26 +40,33 @@ userland:
 %.o: %.s
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# Target para generar una ISO booteable (BIOS/Legacy)
-iso: carley-os.img bootloader
-	@echo "Generando carley-os.iso..."
-	mkdir -p iso_root
-	cp carley-os.img iso_root/
-	xorriso -as mkisofs \
-		-quiet \
-		-V "CARLEY_OS" \
-		-b carley-os.img \
-		-no-emul-boot \
-		-boot-load-size 64 \
-		-o carley-os.iso iso_root || \
-	(echo "Error: xorriso falló al crear ISO." && rm -rf iso_root && exit 1)
+# Generar ISO usando Limine
+iso: $(KERNEL) initrd.bin
+	@echo "Generando carley-os.iso con Limine..."
 	rm -rf iso_root
-	@echo "¡ISO generada con éxito: carley-os.iso!"
+	mkdir -p iso_root/boot
+	cp $(KERNEL) iso_root/boot/
+	cp initrd.bin iso_root/boot/
+	cp limine.conf iso_root/boot/
+	cp limine/limine-bios.sys iso_root/boot/
+	cp limine/limine-bios-cd.bin iso_root/boot/
+	cp limine/limine-uefi-cd.bin iso_root/boot/
+	xorriso -as mkisofs \
+		-b boot/limine-bios-cd.bin \
+		-no-emul-boot -boot-load-size 4 -boot-info-table \
+		--efi-boot boot/limine-uefi-cd.bin \
+		-efi-boot-part --efi-boot-image --protective-msdos-label \
+		iso_root -o carley-os.iso
+	./limine/limine bios-install carley-os.iso
+	rm -rf iso_root
+	@echo "¡ISO generada con éxito con Limine!"
 
 setup:
-	@echo "Entorno listo. Asegúrate de tener 'nasm' instalado."
-	@echo "Ejecuta: 'sudo apt install nasm xorriso mtools qemu-system-x86'"
+	@echo "Instalando dependencias de Limine..."
+	git clone https://github.com/limine-bootloader/limine.git --branch=v7.x-binary --depth=1
+	make -C limine
+	@echo "Dependencias de Limine instaladas."
 
 clean:
-	rm -rf $(OBJ) $(KERNEL) src/boot/*.bin bootloader.bin carley-kernel.iso carley-os.iso carley-os.img initrd.bin meta/pack_initrd meta/format_carleyfs src/boot/ap_trampoline.bin bootx64.efi src/boot/uefi/*.o
+	rm -rf $(OBJ) $(KERNEL) carley-os.iso carley-os.img initrd.bin meta/pack_initrd
 	$(MAKE) -C src/user clean

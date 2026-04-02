@@ -12,6 +12,9 @@
 void pmm_init(void);
 void pmm_init_custom(uint64_t map_addr, uint32_t count);
 
+struct limine_memmap_response;
+void pmm_init_limine(struct limine_memmap_response *response);
+
 /* Reserva una página física de 4KB y devuelve su dirección física */
 void *pmm_alloc_page(void);
 
