@@ -69,11 +69,12 @@ iso: $(KERNEL) initrd.bin
 
 setup:
 	@echo "Instalando dependencias de Limine..."
-	if [ ! -d "limine" ]; then \
+	if [ ! -f "limine/limine" ]; then \
+		rm -rf limine; \
 		git clone https://github.com/limine-bootloader/limine.git --branch=v7.x-binary --depth=1; \
+		$(MAKE) -C limine; \
 	fi
-	$(MAKE) -C limine
-	@echo "Dependencias de Limine instaladas."
+	@echo "Dependencias de Limine instaladas correctamente."
 
 clean:
 	rm -rf $(OBJ) $(KERNEL) carley-os.iso carley-os.img initrd.bin meta/pack_initrd
