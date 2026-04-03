@@ -31,6 +31,9 @@
 #include "drivers/ahci.h"
 #include "limine.h"
 
+extern void serial_init();
+extern void write_serial_string(const char* s);
+
 // Limine Requests
 __attribute__((used, section(".requests")))
 static volatile struct limine_framebuffer_request framebuffer_request = {
@@ -81,15 +84,25 @@ static void hlt(void) { for (;;) { __asm__("hlt"); } }
 void _start(void);
 void draw_splash(void);
 
-extern void serial_init();
-extern void write_serial_string(const char* s);
-
 void _start(void) {
+    // Escribir directamente a los puertos seriales para debugging ultra-temprano
+    __asm__ volatile (
+        "mov $0x3F8, %%dx\n"
+        "mov $'!', %%al\n"
+        "out %%al, %%dx\n"
+        : : : "dx", "al"
+    );
+
     serial_init();
-    write_serial_string("Kernel started via Limine!\n");
+    write_serial_string("\r\n--- Carley OS Booting ---\r\n");
+
     cpu_enable_features();
 
     // Check Limine responses
+    if (framebuffer_request.response == NULL) write_serial_string("Error: No FB\r\n");
+    if (hhdm_request.response == NULL) write_serial_string("Error: No HHDM\r\n");
+    if (memmap_request.response == NULL) write_serial_string("Error: No MemMap\r\n");
+
     if (framebuffer_request.response == NULL || hhdm_request.response == NULL || memmap_request.response == NULL) {
         hlt();
     }
@@ -97,42 +110,38 @@ void _start(void) {
     struct limine_framebuffer *fb = framebuffer_request.response->framebuffers[0];
     uint64_t hhdm = hhdm_request.response->offset;
 
-    // Inicializar video lo antes posible
+    // Inicializar video
     video_init_vbe((uintptr_t)fb->address, fb->width, fb->height);
-    video_clear(0x0000FF); // Pantalla AZUL: el kernel ha empezado
-    write_serial_string("Video initialized.\n");
+    video_clear(0x0000FF);
+    write_serial_string("Video OK\r\n");
 
-    // Reutilizamos la estructura boot_info_t internamente
     boot_info_t binfo;
-    binfo.framebuffer_address = (uintptr_t)fb->address - hhdm; // Base física
+    binfo.framebuffer_address = (uintptr_t)fb->address - hhdm;
     binfo.screen_width = fb->width;
     binfo.screen_height = fb->height;
     binfo.memory_map_address = (uintptr_t)memmap_request.response->entries;
     binfo.memory_map_count = memmap_request.response->entry_count;
     binfo.rsdp_address = (rsdp_request.response) ? (uintptr_t)rsdp_request.response->address : 0;
 
-    // Inicializar PMM con el mapa de Limine
     pmm_init_limine(memmap_request.response);
-    write_serial_string("PMM initialized.\n");
+    write_serial_string("PMM OK\r\n");
 
     vmm_init(&binfo);
-    write_serial_string("VMM initialized.\n");
+    write_serial_string("VMM OK\r\n");
     kheap_init();
-    write_serial_string("Kheap initialized.\n");
+    write_serial_string("Heap OK\r\n");
 
     cpu_init_local(0);
     gdt_init();
     idt_init();
+    write_serial_string("GDT/IDT OK\r\n");
 
-    // Inicializar ACPI
     acpi_init_custom(binfo.rsdp_address);
-
     apic_init();
 
-    // Arrancar otros núcleos usando Limine
     if (smp_request.response) {
         smp_init_limine(smp_request.response);
-        write_serial_string("SMP initialized via Limine.\n");
+        write_serial_string("SMP OK\r\n");
     }
 
     kbd_buf_init();
@@ -142,10 +151,9 @@ void _start(void) {
     ide_init();
     ahci_init();
 
-    // Cargar initrd desde Limine
     if (module_request.response) {
         initrd_load_limine(module_request.response);
-        write_serial_string("Initrd loaded via Limine.\n");
+        write_serial_string("Initrd OK\r\n");
     }
 
     vfs_mount(carleyfs_init());
@@ -155,16 +163,16 @@ void _start(void) {
     pit_init(100);
     sched_create_task(audio_mixer_step, false);
 
-    // Dibujar splash
+    write_serial_string("Starting GUI...\r\n");
     draw_splash();
     video_clear(0x1E1E1E);
     mouse_init();
     composer_start();
 
-    // Cargar módulos
     elf_load("input.elf");
     elf_load("shell_gui.elf");
 
+    write_serial_string("Kernel loop started.\r\n");
     __asm__ volatile("sti");
     for (;;) hlt();
 }
