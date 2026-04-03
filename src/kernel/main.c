@@ -94,15 +94,11 @@ void _start(void) {
     );
 
     serial_init();
-    write_serial_string("\r\n--- Carley OS Booting ---\r\n");
+    write_serial_string("\r\n--- Carley OS Booting (HHDM Fix) ---\r\n");
 
     cpu_enable_features();
 
     // Check Limine responses
-    if (framebuffer_request.response == NULL) write_serial_string("Error: No FB\r\n");
-    if (hhdm_request.response == NULL) write_serial_string("Error: No HHDM\r\n");
-    if (memmap_request.response == NULL) write_serial_string("Error: No MemMap\r\n");
-
     if (framebuffer_request.response == NULL || hhdm_request.response == NULL || memmap_request.response == NULL) {
         hlt();
     }
@@ -123,7 +119,7 @@ void _start(void) {
     binfo.memory_map_count = memmap_request.response->entry_count;
     binfo.rsdp_address = (rsdp_request.response) ? (uintptr_t)rsdp_request.response->address : 0;
 
-    pmm_init_limine(memmap_request.response);
+    pmm_init_limine(memmap_request.response, hhdm);
     write_serial_string("PMM OK\r\n");
 
     vmm_init(&binfo);

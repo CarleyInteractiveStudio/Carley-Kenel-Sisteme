@@ -38,18 +38,16 @@ userland:
 %.o: %.s
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# Generar ISO compatible con BIOS y UEFI
+# Generar ISO compatible con BIOS y UEFI usando una partición EFI real (ESP)
 iso: $(KERNEL) initrd.bin
-	@echo "Generando carley-os.iso (BIOS + UEFI Support)..."
+	@echo "Generando carley-os.iso (HDD/Hybrid Image with ESP)..."
 	rm -rf iso_root
 	mkdir -p iso_root/boot/limine
 	mkdir -p iso_root/EFI/BOOT
 
-	# Kernel e Initrd
+	# Copiar Kernel, Initrd y Configuración
 	cp $(KERNEL) iso_root/boot/
 	cp initrd.bin iso_root/boot/
-
-	# Limine Config (en raíz y en /boot/limine/)
 	cp limine.conf iso_root/
 	cp limine.conf iso_root/boot/limine/
 
@@ -60,19 +58,25 @@ iso: $(KERNEL) initrd.bin
 	# Archivos para UEFI
 	cp limine/limine-uefi-cd.bin iso_root/boot/limine/
 	cp limine/BOOTX64.EFI iso_root/EFI/BOOT/
-	# Tambien soportar 32-bit UEFI por si acaso
-	cp limine/BOOTIA32.EFI iso_root/EFI/BOOT/ 2>/dev/null || true
 
+	# --- PASO CRÍTICO: Crear una partición EFI real (img) ---
+	dd if=/dev/zero of=esp.img bs=1024 count=6144
+	mformat -i esp.img -F ::
+	mmd -i esp.img ::/EFI
+	mmd -i esp.img ::/EFI/BOOT
+	mcopy -i esp.img limine/BOOTX64.EFI ::/EFI/BOOT/
+
+	# Generar el ISO final
 	xorriso -as mkisofs \
 		-b boot/limine/limine-bios-cd.bin \
 		-no-emul-boot -boot-load-size 4 -boot-info-table \
-		--efi-boot boot/limine/limine-uefi-cd.bin \
+		--efi-boot esp.img \
 		-efi-boot-part --efi-boot-image --protective-msdos-label \
-		iso_root -o carley-os.iso
+		-o carley-os.iso iso_root esp.img
 
 	./limine/limine bios-install carley-os.iso
-	rm -rf iso_root
-	@echo "¡ISO generada con éxito con soporte HÍBRIDO (BIOS + UEFI)!"
+	rm -rf iso_root esp.img
+	@echo "¡ISO generada con éxito! Esta versión incluye una partición ESP real para VirtualBox EFI."
 
 setup:
 	@echo "Instalando dependencias de Limine..."
