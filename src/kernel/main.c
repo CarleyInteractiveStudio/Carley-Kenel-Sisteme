@@ -71,6 +71,12 @@ static volatile struct limine_smp_request smp_request = {
     .revision = 0
 };
 
+__attribute__((used, section(".requests")))
+static volatile struct limine_kernel_address_request kernel_address_request = {
+    .id = LIMINE_KERNEL_ADDRESS_REQUEST,
+    .revision = 0
+};
+
 __attribute__((used, section(".requests_start_marker")))
 static volatile LIMINE_REQUESTS_START_MARKER;
 
@@ -85,20 +91,11 @@ void _start(void);
 void draw_splash(void);
 
 void _start(void) {
-    // Escribir directamente a los puertos seriales para debugging ultra-temprano
-    __asm__ volatile (
-        "mov $0x3F8, %%dx\n"
-        "mov $'!', %%al\n"
-        "out %%al, %%dx\n"
-        : : : "dx", "al"
-    );
-
     serial_init();
-    write_serial_string("\r\n--- Carley OS Booting (HHDM Fix) ---\r\n");
+    write_serial_string("\r\n--- Carley OS (Final Hybrid) ---\r\n");
 
     cpu_enable_features();
 
-    // Check Limine responses
     if (framebuffer_request.response == NULL || hhdm_request.response == NULL || memmap_request.response == NULL) {
         hlt();
     }
@@ -106,7 +103,6 @@ void _start(void) {
     struct limine_framebuffer *fb = framebuffer_request.response->framebuffers[0];
     uint64_t hhdm = hhdm_request.response->offset;
 
-    // Inicializar video
     video_init_vbe((uintptr_t)fb->address, fb->width, fb->height);
     video_clear(0x0000FF);
     write_serial_string("Video OK\r\n");
@@ -122,7 +118,15 @@ void _start(void) {
     pmm_init_limine(memmap_request.response, hhdm);
     write_serial_string("PMM OK\r\n");
 
-    vmm_init(&binfo);
+    // Pasar información del kernel al VMM para mapeo correcto
+    if (kernel_address_request.response) {
+        uint64_t phys_base = kernel_address_request.response->physical_base;
+        uint64_t virt_base = kernel_address_request.response->virtual_base;
+        vmm_init_limine(&binfo, phys_base, virt_base);
+    } else {
+        vmm_init(&binfo);
+    }
+
     write_serial_string("VMM OK\r\n");
     kheap_init();
     write_serial_string("Heap OK\r\n");

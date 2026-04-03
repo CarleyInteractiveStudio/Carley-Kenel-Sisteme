@@ -38,45 +38,35 @@ userland:
 %.o: %.s
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# Generar ISO compatible con BIOS y UEFI usando una partición EFI real (ESP)
+# Generar ISO usando Limine - Estructura Simplificada
 iso: $(KERNEL) initrd.bin
-	@echo "Generando carley-os.iso (HDD/Hybrid Image with ESP)..."
+	@echo "Generando carley-os.iso (Standard Limine Layout)..."
 	rm -rf iso_root
-	mkdir -p iso_root/boot/limine
-	mkdir -p iso_root/EFI/BOOT
+	mkdir -p iso_root
 
-	# Copiar Kernel, Initrd y Configuración
-	cp $(KERNEL) iso_root/boot/
-	cp initrd.bin iso_root/boot/
+	# Todo en la raíz para evitar fallos de rutas
+	cp $(KERNEL) iso_root/
+	cp initrd.bin iso_root/
 	cp limine.conf iso_root/
-	cp limine.conf iso_root/boot/limine/
+	cp limine/limine-bios.sys iso_root/
+	cp limine/limine-bios-cd.bin iso_root/
+	cp limine/limine-uefi-cd.bin iso_root/
 
-	# Archivos para BIOS
-	cp limine/limine-bios.sys iso_root/boot/limine/
-	cp limine/limine-bios-cd.bin iso_root/boot/limine/
-
-	# Archivos para UEFI
-	cp limine/limine-uefi-cd.bin iso_root/boot/limine/
+	# También crear la carpeta EFI estándar
+	mkdir -p iso_root/EFI/BOOT
 	cp limine/BOOTX64.EFI iso_root/EFI/BOOT/
+	cp limine/BOOTIA32.EFI iso_root/EFI/BOOT/ 2>/dev/null || true
 
-	# --- PASO CRÍTICO: Crear una partición EFI real (img) ---
-	dd if=/dev/zero of=esp.img bs=1024 count=6144
-	mformat -i esp.img -F ::
-	mmd -i esp.img ::/EFI
-	mmd -i esp.img ::/EFI/BOOT
-	mcopy -i esp.img limine/BOOTX64.EFI ::/EFI/BOOT/
-
-	# Generar el ISO final
 	xorriso -as mkisofs \
-		-b boot/limine/limine-bios-cd.bin \
+		-b limine-bios-cd.bin \
 		-no-emul-boot -boot-load-size 4 -boot-info-table \
-		--efi-boot esp.img \
+		--efi-boot limine-uefi-cd.bin \
 		-efi-boot-part --efi-boot-image --protective-msdos-label \
-		-o carley-os.iso iso_root esp.img
+		iso_root -o carley-os.iso
 
 	./limine/limine bios-install carley-os.iso
-	rm -rf iso_root esp.img
-	@echo "¡ISO generada con éxito! Esta versión incluye una partición ESP real para VirtualBox EFI."
+	rm -rf iso_root
+	@echo "¡ISO generada con éxito!"
 
 setup:
 	@echo "Instalando dependencias de Limine..."
