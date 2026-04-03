@@ -6,12 +6,13 @@
 #include "pmm.h"
 #include "spinlock.h"
 #include "config.h"
+#include "limine.h"
 
 static uint8_t *bitmap = NULL;
 static uint64_t total_pages = 0;
 static uint64_t free_pages = 0;
 static uint64_t last_index = 0;
-static uint64_t hhdm_offset = 0;
+static uint64_t hhdm_offset_val = 0;
 static spinlock_t pmm_lock = 0;
 
 static uint16_t *ref_counts = NULL;
@@ -28,44 +29,47 @@ static inline bool bitmap_test(uint64_t index) {
     return (bitmap[index / 8] & (1 << (index % 8))) != 0;
 }
 
-void pmm_init(void) {
-    // Obsoleto en el cargador Carley. Usamos pmm_init_custom.
-}
+void pmm_init(void) { }
+void pmm_init_custom(uint64_t map_addr, uint32_t count) { (void)map_addr; (void)count; }
 
-void pmm_init_custom(uint64_t map_addr, uint32_t count) {
-    e820_entry_t *map = (e820_entry_t *)map_addr;
-    hhdm_offset = 0; // En nuestro cargador el kernel es identity mapped (0-4GB)
+void pmm_init_limine(struct limine_memmap_response *response, uint64_t hhdm) {
+    hhdm_offset_val = hhdm;
 
     uint64_t highest_address = 0;
-    for (uint32_t i = 0; i < count; i++) {
-        if (map[i].type == 1) { // Type 1 = Usable
-            uint64_t top = map[i].base + map[i].length;
-            if (top > highest_address) highest_address = top;
-        }
+    for (uint64_t i = 0; i < response->entry_count; i++) {
+        struct limine_memmap_entry *entry = response->entries[i];
+        uint64_t top = entry->base + entry->length;
+        if (top > highest_address) highest_address = top;
     }
 
     total_pages = highest_address / PAGE_SIZE;
     uint64_t bitmap_size = (total_pages / 8);
     bitmap_size = (bitmap_size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
 
-    // Buscar sitio para el bitmap. Usaremos los primeros 1MB libres despues del Kernel
-    // El kernel esta en 0x100000. Pondremos el bitmap en 0x500000 (5MB) para estar seguros.
-    bitmap = (uint8_t *)(0x500000 + HHDM_OFFSET);
-    memset(bitmap, 0xff, bitmap_size);
+    // Encontrar un hueco para el bitmap
+    for (uint64_t i = 0; i < response->entry_count; i++) {
+        struct limine_memmap_entry *entry = response->entries[i];
+        if (entry->type == LIMINE_MEMMAP_USABLE && entry->length >= bitmap_size + (total_pages * 2)) {
+            bitmap = (uint8_t *)(entry->base + hhdm_offset_val);
+            ref_counts = (uint16_t *)((uintptr_t)bitmap + bitmap_size);
+            break;
+        }
+    }
 
-    // Reservar espacio para los contadores de referencia (2 bytes por página)
-    ref_counts = (uint16_t *)(0x600000 + HHDM_OFFSET);
+    memset(bitmap, 0xff, bitmap_size);
     memset(ref_counts, 0, total_pages * 2);
 
-    for (uint32_t i = 0; i < count; i++) {
-        if (map[i].type == 1) {
-            for (uint64_t j = 0; j < map[i].length; j += PAGE_SIZE) {
-                uint64_t addr = map[i].base + j;
-                // No marcar como libre si esta por debajo de 6MB (Kernel, Bootloader, Stack, Bitmap)
-                if (addr >= 0x600000) {
-                    bitmap_clear(addr / PAGE_SIZE);
-                    free_pages++;
-                }
+    for (uint64_t i = 0; i < response->entry_count; i++) {
+        struct limine_memmap_entry *entry = response->entries[i];
+        if (entry->type == LIMINE_MEMMAP_USABLE) {
+            for (uint64_t j = 0; j < entry->length; j += PAGE_SIZE) {
+                uint64_t addr = entry->base + j;
+                uint64_t bitmap_phys = (uintptr_t)bitmap - hhdm_offset_val;
+                if (addr >= bitmap_phys && addr < bitmap_phys + bitmap_size + (total_pages * 2))
+                    continue;
+
+                bitmap_clear(addr / PAGE_SIZE);
+                free_pages++;
             }
         }
     }
@@ -128,7 +132,6 @@ void pmm_free_page(void *ptr) {
     uint64_t index = (uint64_t)ptr / PAGE_SIZE;
     if (index >= total_pages) return;
     spin_lock(&pmm_lock);
-
     if (ref_counts[index] > 0) {
         ref_counts[index]--;
     } else {
