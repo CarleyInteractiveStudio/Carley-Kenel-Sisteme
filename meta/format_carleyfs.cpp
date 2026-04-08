@@ -1,7 +1,8 @@
-#include <stdio.h>
-#include <stdint.h>
-#include <stdlib.h>
-#include <string.h>
+#include <iostream>
+#include <fstream>
+#include <vector>
+#include <cstring>
+#include <cstdint>
 
 /* Synchronized with common/config.h */
 #define MAX_INODES 128
@@ -27,28 +28,24 @@ typedef struct {
 
 int main(int argc, char **argv) {
     if (argc < 4) {
-        printf("Uso: %s <imagen.img> <bootloader.bin> <kernel.bin> [initrd.bin]\n", argv[0]);
+        std::cerr << "Uso: " << argv[0] << " <imagen.img> <bootloader.bin> <kernel.bin> [initrd.bin] [ap_trampoline.bin]" << std::endl;
         return 1;
     }
 
-    FILE *img = fopen(argv[1], "wb");
+    std::ofstream img(argv[1], std::ios::binary);
     if (!img) return 1;
 
     // 1. Escribir ceros (40MB)
-    uint8_t *zero = (uint8_t *)calloc(1, 1024 * 1024);
-    for (int i = 0; i < 40; i++) fwrite(zero, 1, 1024 * 1024, img);
-    free(zero);
+    std::vector<char> zero(1024 * 1024, 0);
+    for (int i = 0; i < 40; i++) img.write(zero.data(), zero.size());
 
     // 2. Escribir Bootloader (LBA 0)
-    FILE *boot = fopen(argv[2], "rb");
-    fseek(boot, 0, SEEK_END);
-    size_t boot_size = ftell(boot);
-    rewind(boot);
-    uint8_t *boot_buf = (uint8_t *)malloc(boot_size);
-    fread(boot_buf, 1, boot_size, boot);
-    fseek(img, 0, SEEK_SET);
-    fwrite(boot_buf, 1, boot_size, img);
-    fclose(boot);
+    std::ifstream boot(argv[2], std::ios::binary);
+    if (boot) {
+        std::vector<char> boot_buf((std::istreambuf_iterator<char>(boot)), std::istreambuf_iterator<char>());
+        img.seekp(0, std::ios::beg);
+        img.write(boot_buf.data(), boot_buf.size());
+    }
 
     // 3. Crear Estructura CarleyFS
     carleyfs_superblock_t sb = {0};
@@ -56,39 +53,38 @@ int main(int argc, char **argv) {
     sb.num_inodes = 0;
     sb.next_free_sector = DATA_SECTOR_START;
 
-    carleyfs_inode_t inodes[MAX_INODES] = {0};
+    std::vector<carleyfs_inode_t> inodes(MAX_INODES, {0});
 
     auto add_file = [&](const char *path, const char *name) {
-        FILE *f = fopen(path, "rb");
+        std::ifstream f(path, std::ios::binary);
         if (!f) return;
-        fseek(f, 0, SEEK_END);
-        uint32_t size = ftell(f);
-        rewind(f);
-
-        uint8_t *buf = (uint8_t *)malloc(size);
-        fread(buf, 1, size, f);
+        std::vector<char> buf((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
 
         uint32_t start = sb.next_free_sector;
-        if (strcmp(name, "initrd") == 0) {
+        if (std::strcmp(name, "initrd") == 0) {
             start = INITRD_SECTOR;
         }
 
-        fseek(img, (long)start * 512, SEEK_SET);
-        fwrite(buf, 1, size, img);
+        // ALINEACIÓN CRÍTICA: Forzamos alineación a 2048 bytes (4 sectores lógicos de 512)
+        // Esto asegura que cada archivo empiece al inicio de un sector físico de CD de 2048 bytes.
+        // El Superbloque (128) y los Inodos (132) ya están alineados a 2048 (128 % 4 == 0, 132 % 4 == 0).
+        if (start != INITRD_SECTOR) {
+            start = (start + 3) & ~3;
+        }
 
-        strncpy(inodes[sb.num_inodes].name, name, 63);
-        inodes[sb.num_inodes].size = size;
+        img.seekp((long long)start * 512, std::ios::beg);
+        img.write(buf.data(), buf.size());
+
+        std::strncpy(inodes[sb.num_inodes].name, name, 63);
+        inodes[sb.num_inodes].size = (uint32_t)buf.size();
         inodes[sb.num_inodes].start_sector = start;
         inodes[sb.num_inodes].type = 1;
         inodes[sb.num_inodes].used = 1;
 
         sb.num_inodes++;
-        if (start == sb.next_free_sector) {
-            sb.next_free_sector += (size + 511) / 512;
+        if (start != INITRD_SECTOR) {
+            sb.next_free_sector = start + ((uint32_t)buf.size() + 511) / 512;
         }
-
-        free(buf);
-        fclose(f);
     };
 
     add_file(argv[3], "kernel");
@@ -96,14 +92,14 @@ int main(int argc, char **argv) {
     if (argc > 5) add_file(argv[5], "ap_trampoline");
 
     // Escribir Superbloque (LBA 128)
-    fseek(img, SUPERBLOCK_SECTOR * 512, SEEK_SET);
-    fwrite(&sb, 1, 512, img);
+    img.seekp(SUPERBLOCK_SECTOR * 512, std::ios::beg);
+    img.write(reinterpret_cast<char*>(&sb), sizeof(sb));
 
     // Escribir Tabla de Inodos (LBA 132)
-    fseek(img, 512 * INODE_SECTOR_START, SEEK_SET);
-    fwrite(inodes, sizeof(carleyfs_inode_t), MAX_INODES, img);
+    img.seekp(INODE_SECTOR_START * 512, std::ios::beg);
+    img.write(reinterpret_cast<char*>(inodes.data()), inodes.size() * sizeof(carleyfs_inode_t));
 
-    fclose(img);
-    printf("CarleyFS: Imagen generada con %u archivos y alineación CD.\n", sb.num_inodes);
+    img.close();
+    std::cout << "CarleyFS: Imagen generada con " << (int)sb.num_inodes << " archivos y alineación 2048-bytes." << std::endl;
     return 0;
 }
