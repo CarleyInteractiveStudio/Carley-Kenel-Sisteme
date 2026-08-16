@@ -1,0 +1,15 @@
+import "project-K/lib/hardware/screen.dk"
+
+# Librería de Entrada y Salida Simplificada en K
+
+fnc print_str(col, row, str_val, color) {
+    screen_write_char(col, row, str_val, color)
+}
+
+fnc print_char(col, row, ch, color) {
+    screen_write_char(col, row, ch, color)
+}
+
+fnc clear_screen(color) {
+    screen_fill_color(color)
+}

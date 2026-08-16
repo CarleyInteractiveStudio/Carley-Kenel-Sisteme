@@ -1,0 +1,12 @@
+import "lib/math.dk"
+import "lib/io.dk"
+import "kernel/hal.dk"
+import "kernel/memory.dk"
+import "kernel/scheduler.dk"
+
+# Librería de Sistema Carley OS (.dk)
+
+fnc sys_init() {
+    memory_init()
+    scheduler_init()
+}

@@ -1,0 +1,30 @@
+# Capa de Abstracción de Hardware (HAL) en Lenguaje K
+# Diseñado para portabilidad (PC x86, consolas, dispositivos móviles)
+
+# Puertos I/O Genéricos
+fnc hal_outb(port, val) {
+    outb(port, val)
+}
+
+fnc hal_inb(port) {
+    return inb(port)
+}
+
+# Lectura / Escritura directa en RAM
+fnc hal_mem_write(addr, val) {
+    mem_write(addr, val)
+}
+
+fnc hal_mem_read(addr) {
+    return mem_read(addr)
+}
+
+# Habilitar/Deshabilitar interrupciones
+fnc hal_disable_interrupts() {
+    # Port I/O master PIC mask
+    outb(0x21, 0xFF)
+}
+
+fnc hal_enable_interrupts() {
+    outb(0x21, 0x00)
+}

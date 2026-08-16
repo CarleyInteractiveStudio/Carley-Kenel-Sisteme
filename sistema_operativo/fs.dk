@@ -1,0 +1,21 @@
+import "project-K/lib/hardware/disk.dk"
+
+# Driver de Sistema de Archivos Simple (FS) en K
+# Carga y gestiona tablas de asignación de archivos desde el disco duro ATA
+
+fnc fs_init() {
+    # Leer sector 1 de metadatos de disco en el buffer de memoria 0x00100000
+    disk_read_sector(1, 0x00100000)
+}
+
+fnc fs_read_file(file_sector, target_buffer) {
+    disk_read_sector(file_sector, target_buffer)
+}
+
+fnc fs_exists(file_id) {
+    magic = mem_read(0x00100000)
+    if (magic == 0x4B46) { # Magic 'KF' (K-FS)
+        return 1
+    }
+    return 0
+}
