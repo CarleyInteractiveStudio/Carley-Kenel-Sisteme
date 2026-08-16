@@ -25,13 +25,13 @@ os: compiler
 	$(KCC) sistema_operativo/main.k -o sistema_operativo/cos.bin
 
 iso: os
-	@echo "==> Generando la imagen ISO booteable (carley-os.iso)..."
-	$(PYTHON) meta/make_iso.py sistema_operativo/cos.bin carley-os.iso
+	@echo "==> Generando la imagen de disco (.img) y la ISO booteable (.iso)..."
+	$(PYTHON) meta/make_iso.py sistema_operativo/cos.bin carley-os.img carley-os.iso
 
 clean:
 	@echo "==> Limpiando binarios..."
 	rm -f arrancador/*.bin arrancador/*.bin.s
 	rm -f kernel/*.bin kernel/*.bin.s
 	rm -f sistema_operativo/*.bin sistema_operativo/*.bin.s
-	rm -f carley-os.iso kernel.bin kernel.bin.s
+	rm -f carley-os.iso carley-os.img kernel.bin kernel.bin.s meta/*.o meta/*.bin
 	$(MAKE) -C project-K clean
