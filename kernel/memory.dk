@@ -1,0 +1,28 @@
+# Gestor de Memoria Dinámica (Heap Allocator) en Lenguaje K
+# Direcciones reservadas en RAM:
+# 0x00090000: heap_curr_ptr
+
+fnc memory_init() {
+    # Inicializar heap_curr en 0x00200000 (2 MB)
+    mem_write(0x00090000, 0x00200000)
+}
+
+fnc kmalloc(size) {
+    curr = mem_read(0x00090000)
+    # Limite heap: 8MB (0x00800000)
+    if (curr + size > 0x00800000) {
+        return 0
+    }
+    next_heap = curr + size
+    mem_write(0x00090000, next_heap)
+    return curr
+}
+
+fnc kfree(ptr) {
+    return 0
+}
+
+fnc memory_get_used() {
+    curr = mem_read(0x00090000)
+    return curr - 0x00200000
+}

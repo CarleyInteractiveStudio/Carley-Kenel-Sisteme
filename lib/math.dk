@@ -1,0 +1,22 @@
+# Librería Matemática del Sistema K (.dk)
+
+fnc math_abs(n) {
+    if (n < 0) {
+        return 0 - n
+    }
+    return n
+}
+
+fnc math_max(a, b) {
+    if (a > b) {
+        return a
+    }
+    return b
+}
+
+fnc math_min(a, b) {
+    if (a < b) {
+        return a
+    }
+    return b
+}

@@ -1,0 +1,33 @@
+# Sistema de Multitarea y Gestor de Procesos en Lenguaje K
+# Direcciones reservadas en RAM:
+# 0x00090010: task_count
+# 0x00090014: current_task
+
+fnc scheduler_init() {
+    mem_write(0x00090010, 0)
+    mem_write(0x00090014, 0)
+}
+
+fnc create_task(task_id, priority) {
+    count = mem_read(0x00090010)
+    if (count < 8) {
+        new_count = count + 1
+        mem_write(0x00090010, new_count)
+        return task_id
+    }
+    return 0
+}
+
+fnc schedule_next() {
+    count = mem_read(0x00090010)
+    if (count == 0) {
+        return 0
+    }
+    curr = mem_read(0x00090014)
+    next_task = curr + 1
+    if (next_task == count) {
+        next_task = 0
+    }
+    mem_write(0x00090014, next_task)
+    return next_task
+}
